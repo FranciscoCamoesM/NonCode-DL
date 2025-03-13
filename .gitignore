@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+old_noncode/
+genomes/
+saved_models/
+temp_files/
+Fasta_Pool1/
+deeplift_plots/
+data/
+aa.py
+modisco/

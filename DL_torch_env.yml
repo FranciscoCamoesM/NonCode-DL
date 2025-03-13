@@ -1,0 +1,46 @@
+name: DL_torch
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - bioconda
+
+dependencies:
+  # - python=3.12.9
+  - ipykernel==6.29.5
+  - jupyter_client==8.6.3
+  - jupyter_core==5.7.2
+  - jupyterlab==4.3.1
+  - pytorch==2.5.1
+  - torchvision==0.20.1
+  - torchaudio==2.5.1
+  - pytorch-cuda=12.1 #Version is important for compatibility with cuda driver on the cluster (supports CUDA Version up to 12.2)
+  - pytorch-lightning==2.4.0
+  - wandb==0.18.7
+  - scikit-learn==1.5.2
+  - numpy==2.0.1
+  - pandas
+  - scipy==1.14.1
+  - polars==1.15.0 
+  # - bioconda::bioframe==0.7.2
+  - matplotlib-base==3.9.2
+  - scanpy==1.10.4
+  - muon==0.1.6
+  - mudata==0.3.1
+  - seaborn==0.13.2
+  - plotnine==0.14.2
+  # - python-igraph==0.11.8
+  - leidenalg==0.10.2
+  # - bioconda::snapatac2
+  - conda-forge::pyarrow
+  # - bioconda::macs3
+
+
+#installing pip dependencies seperatley, the safe way (this makes sure pip installs in the right directory) :
+
+#TANGERMEME
+#target_dir=/groups/stark/nikolaus.mandlburger/.conda/envs/DL_torch/lib/python3.12/site-packages
+#pip_version=/groups/stark/nikolaus.mandlburger/.conda/envs/DL_torch/bin/pip3
+#$pip_version install 'tangermeme==0.4.2' --target=$target_dir 
+
+# if necessary purge cache using conda clean -a and pip cache using pip cache purge
