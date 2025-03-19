@@ -328,8 +328,6 @@ for n_delete in range(0, 16):
     for l in range((len(enhancer)) - n_delete + 1):
         enhancer_mut = enhancer[:l] + enhancer[l+n_delete:]
 
-        print(len(enhancer_mut), len(enhancer))
-
         # print(l)
         # print(enhancer)
         # print(enhancer_mut)
