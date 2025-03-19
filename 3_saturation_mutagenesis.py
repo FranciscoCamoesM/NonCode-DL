@@ -322,11 +322,13 @@ with open(f"original_enhancers.txt", "r") as f:
 f2d = []
 
 # deletions
-for n_delete in range(1, 15):
+for n_delete in range(0, 16):
 
     data = []
     for l in range((len(enhancer)) - n_delete + 1):
         enhancer_mut = enhancer[:l] + enhancer[l+n_delete:]
+
+        print(len(enhancer_mut), len(enhancer))
 
         # print(l)
         # print(enhancer)
@@ -347,7 +349,7 @@ for n_delete in range(1, 15):
     
     out = out[:,0] - wt_out[0][0]
 
-    new_line = np.zeros((251))
+    new_line = np.zeros((202))
     new_line[:len(out)] = out
     f2d.append(new_line)
 
@@ -394,3 +396,4 @@ plt.ylabel("Mean attribution")
 plt.savefig(f"explicability_figs/{ENHANCER_NAME}_{model_id}_deletions_mean_triangular.png")
 # plt.show()
 plt.close()
+    
