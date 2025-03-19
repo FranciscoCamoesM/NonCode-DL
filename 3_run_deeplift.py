@@ -111,6 +111,9 @@ with open(f"original_enhancers.txt", "r") as f:
     # so select the line after the one with the enhancer name
     enhancer = enhancer[enhancer.index(f">{ENHANCER_NAME}\n") + 1].strip()
 
+enhancer_len = len(enhancer)
+pads = 250//2 - enhancer_len//2
+pads = [pads, 250 - pads - enhancer_len]
 
 enhancer = pad_samples([(enhancer, "MM")], LABELS)[0][0]
 enhancer = torch.tensor(enhancer, dtype=torch.float32).unsqueeze(0).permute(0, 2, 1)
@@ -123,85 +126,47 @@ fig, ax = plt.subplots(2, 1, figsize=(len(reference_shap_values[0][0])//15, 6))
 plot_logo(reference_shap_values[0].cpu().detach().numpy(), ax=ax[0])
 plot_logo(reference_shap_values[0].cpu().detach().numpy() * enhancer[0].cpu().detach().numpy(), ax=ax[1])
 plt.savefig(f"explicability_figs/{ENHANCER_NAME}_{model_id}_shap.png")
-
-fig, ax = plt.subplots(2, 1, figsize=(len(reference_shap_values[0][0])//15, 6))
-plot_heatmap(reference_shap_values[0].cpu().detach().numpy() * enhancer[0].cpu().detach().numpy(), cmap="coolwarm", ax=ax[0])
-plot_heatmap(reference_shap_values[0].cpu().detach().numpy(), cmap="coolwarm", ax=ax[1])
-plt.savefig(f"explicability_figs/{ENHANCER_NAME}_{model_id}_heatmap.png")
-
-
-# do saturation mutagenesis on the WT enhancer
-
-dataset = []
-for i in range(enhancer.shape[2]):
-    enhancer_mut = enhancer.clone()
-    enhancer_mut[0, :, i] = 0
-    for j in range(4):
-        enhancer_mut[0, j, i] = 1
-        dataset.append(enhancer_mut[0])
-
-loader = DataLoader(dataset, batch_size=32, shuffle=False)
-
-y = []
-for X in loader:
-    out = model(X.to(device)).cpu().detach().numpy()
-    y.extend(list(out))
-
-y = np.array(y)
-# reorganize the output to be in the same format as the shap values
-y_reshaped = []
-for i in range(enhancer.shape[2]):
-    y_reshaped.append(y[i*4:(i+1)*4])
-
-y = np.array(y_reshaped)
-
-
 plt.close()
 
-fig, ax = plt.subplots(1, 1, figsize=(len(reference_shap_values[0][0])//15, 6))
-plt.imshow(y[0].T, cmap="coolwarm", aspect="auto")
-plt.colorbar()
-plt.savefig(f"explicability_figs/{ENHANCER_NAME}_{model_id}_saturation.png")
 
 
 
+fig, ax = plt.subplots(3, 1, figsize=(len(reference_shap_values[0][0])//15, 8), sharex=True)
+
+# Compute the signal
+wt_signal = reference_shap_values[0].cpu().detach().numpy() * enhancer[0].cpu().detach().numpy()
+wt_signal = np.sum(wt_signal, axis=0)
+
+# Plot the signal
+# fill the padded area with black
+ax[0].fill_between([0, pads[0]], min(wt_signal), max(wt_signal), color="black", alpha=0.15)
+ax[0].fill_between([250 - pads[1], 250], min(wt_signal), max(wt_signal), color="black", alpha=0.15)
 
 
+ax[0].plot([0, len(wt_signal)], [0, 0], color="r", alpha=0.4)
+ax[0].plot(wt_signal)
+ax[0].set_title("SHAP Values of WT enhancer")
+
+# Plot the SHAP values
+v = np.max(np.abs(reference_shap_values[0].cpu().detach().numpy()))
+im = ax[1].imshow(reference_shap_values[0].cpu().detach().numpy(), cmap="coolwarm", aspect="auto", vmin=-v, vmax=v)
+ax[1].set_yticks([0, 1, 2, 3], ["A", "C", "G", "T"])
+ax[1].set_title("SHAP Values")
 
 
+cbar = fig.colorbar(im, ax=ax, orientation='vertical', shrink=0.6, pad=0.02)
+cbar.set_label("SHAP Value Intensity")
 
 
-exit()
-
-# Load the data
-print("Loading data")
-dataset = get_seq_label_pairs(enh_name = ENHANCER_NAME)
-
-X = list(dataset.keys())
-y = list(dataset.values())
-
-dataset = EnhancerDataset(X, y, LABELS)
-
-loader = DataLoader(dataset, batch_size=BATCH_SIZE, shuffle=False)
-
-print("Data loaded")
+att_energy = reference_shap_values[0].cpu().detach().numpy() ** 2
+att_energy = np.sum(att_energy, axis=0)**0.5
+ax[2].plot(att_energy)
+ax[2].set_title("Euclidean norm of SHAP values")
+ax[2].fill_between([0, pads[0]], min(att_energy), max(att_energy), color="black", alpha=0.15)
+ax[2].fill_between([250 - pads[1], 250], min(att_energy), max(att_energy), color="black", alpha=0.15)
+ax[2].set_xlabel("Position")
 
 
-# implement deeplift
-
-# get the first batch
-X, y = next(iter(loader))
-X = torch.tensor(X, dtype=torch.float32).permute(0, 2, 1)[:20]
-# y = torch.tensor(y, dtype=torch.float32).to(device)
-
-print(X.shape, enhancer.shape)
-# get the deep lift shap values
-shap_values = deep_lift_shap(model, X, hypothetical=True)
-
-
-for i, v in enumerate(shap_values):
-    fig, ax = plt.subplots(2, 1, figsize=(len(v[0])//15, 6))
-    plot_logo(v.cpu().detach().numpy(), ax=ax[0])
-    plot_logo((v.cpu().detach().numpy()) * X[i].cpu().detach().numpy(), ax=ax[1])
-    plt.show()
-    # plot_heatmap(v.cpu().detach().numpy() - (reference_shap_values[0].cpu().detach().numpy()), cmap="coolwarm")
+plt.savefig(f"explicability_figs/{ENHANCER_NAME}_{model_id}_heatmap.png")
+# plt.show()
+plt.close()
