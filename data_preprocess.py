@@ -54,7 +54,7 @@ class File:
 
 
 
-def import_files(local_path = "Fasta_Pool2"):
+def import_files(local_path = "Fasta_Pool2", **kwargs):
     all_files = []
     for file in os.listdir(local_path):
         if file.endswith(".fa"):
@@ -64,8 +64,8 @@ def import_files(local_path = "Fasta_Pool2"):
 
     return all_files
 
-def import_indiv_enhancers(enh_id = 0, enh_name = None):
-    all_files = import_files()
+def import_indiv_enhancers(enh_id = 0, enh_name = None, **kwargs):
+    all_files = import_files(**kwargs)
     enhancer_names = [f.file_enh for f in all_files]
     enhancer_names = list(set(enhancer_names))
 
