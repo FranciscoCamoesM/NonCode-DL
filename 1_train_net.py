@@ -37,6 +37,7 @@ parser.add_argument('--wd', type=float, default=1e-5, help='Weight decay for the
 parser.add_argument('--mom', type=float, default=None, help='Momentum for the optimizer')
 parser.add_argument('--optim', type=str, default='adam', help='Optimizer to use')
 parser.add_argument('--best_val', type=bool, default=True, help='Whether to save the best model based on validation accuracy')
+parser.add_argument('--datafolder', type=str, default='Fasta_Pool2', help='Folder where the data is stored')
 args = parser.parse_args()
 
 ENHANCER_NAME = args.enh
@@ -50,6 +51,7 @@ MOM = args.mom
 OPTIM = args.optim
 SUBSET = args.subset
 BEST_VAL = args.best_val
+DATA_FOLDER = args.datafolder
 
 SAVE_DIR = 'saved_models'
 
@@ -60,7 +62,7 @@ N_CLASSES = len(list(LABELS.values())[0])
 
 
 # Load the data
-dataset = get_seq_label_pairs(enh_name = ENHANCER_NAME)
+dataset = get_seq_label_pairs(enh_name = ENHANCER_NAME, local_path = DATA_FOLDER)
 
 # Split the data
 X = list(dataset.keys())
