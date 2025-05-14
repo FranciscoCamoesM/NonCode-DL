@@ -17,7 +17,7 @@ parser = argparse.ArgumentParser(description='Train a model to predict enhancer 
 
 parser.add_argument('--id', type=int, default=None, help='Batch size for training')
 parser.add_argument('--w', type=int, default=250, help='Window size surrounding the peak to consider for motif analysis.')
-parser.add_argument('--n', type=int, default=100000, help='The maximum number of sequences per metacluster to consider for motif analysis.')
+parser.add_argument('--n', type=int, default=500000, help='The maximum number of sequences per metacluster to consider for motif analysis.')
 parser.add_argument('--z', type=int, default=20, help='The size of the seqlet cores, corresponding to `sliding_window_size`.')
 parser.add_argument('--n_data', type=int, default=None, help='The number of sequences to use for motif analysis.')
 args = parser.parse_args()
@@ -28,6 +28,7 @@ MODISCO_W = args.w
 MODISCO_N = args.n
 MODISCO_Z = args.z
 N_DATA = args.n_data
+N_REFS = 40
 
 
 if model_id is None:
@@ -93,37 +94,32 @@ model.to(device)
 model.eval()
 
 
-class Wrapper(nn.Module):
-    def __init__(self, model):
-        super(Wrapper, self).__init__()
-        self.model = model
-
-    def forward(self, x):
-        out = self.model(x)
-
-        out = out[:,1] - out[:,0]
-        return out.unsqueeze(1)
-
-
-model = Wrapper(model)
-
-
-
 
 
 enhancer = load_wt(ENHANCER_NAME)
 
 
 enhancer = pad_samples([(enhancer, "MM")], LABELS)[0][0]
-enhancer = torch.tensor(enhancer, dtype=torch.float32).unsqueeze(0).permute(0, 2, 1)
+enhancer = torch.tensor(enhancer, dtype=torch.float32).unsqueeze(0)
 
-# get the deep lift shap values
-reference_shap_values = deep_lift_shap(model, enhancer, hypothetical=True)
+# load training data
+dataloc = get_dataloc(ENHANCER_NAME)
+dataset = get_seq_label_pairs(enh_name = ENHANCER_NAME, local_path = dataloc)
+X = list(dataset.keys())
+y = list(dataset.values())
+dataset = EnhancerDataset(X, y, LABELS)
+dataloader = torch.utils.data.DataLoader(dataset, batch_size=N_REFS, shuffle=True, num_workers=4)
+
+for x, y in dataloader:
+    references = x.float()
+    print(f"References shape: {references.shape}")
+    break
+
 
 
 # Load the data
 print("Loading data")
-dataset = get_seq_label_pairs(enh_name = ENHANCER_NAME)
+dataset = get_seq_label_pairs(enh_name = ENHANCER_NAME, local_path = dataloc)
 
 X = list(dataset.keys())
 y = list(dataset.values())
@@ -144,7 +140,8 @@ import time
 # get the first batch
 X, y = next(iter(loader))
 # y = torch.tensor(y, dtype=torch.float32).to(device)
-X = torch.tensor(X, dtype=torch.float32).permute(0, 2, 1)
+print(X.shape)
+X = torch.tensor(X, dtype=torch.float32)
 data_np = X.cpu().detach().numpy()
 
 #remove non-onehot encoded sequences
@@ -154,7 +151,8 @@ X = X[mask]
 
 # get the deep lift shap values
 start = time.time()
-hyp_scores = deep_lift_shap(model, X, hypothetical=True)
+# hyp_scores = deep_lift_shap(model, X, hypothetical=True, references=references, device=device)
+hyp_scores = deep_lift_shap(model, X, hypothetical=True, n_shuffles =N_REFS, device=device)
 print("Calculated deep lift shap values")
 print("Time taken: ", time.time() - start)
 

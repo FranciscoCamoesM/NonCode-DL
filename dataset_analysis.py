@@ -1,7 +1,7 @@
 import numpy as np
 import os
 import matplotlib.pyplot as plt
-from data_preprocess import import_files, load_wt
+from data_preprocess import import_files, load_wt, get_seq_label_pairs, EnhancerDataset, preset_labels
 from tqdm import tqdm
 
 
@@ -73,12 +73,31 @@ def mutation_distribution(wt_seq, mut_seqs, enh):
     return mut_counts
 
 
+def count_nucleotides(seq):
+    counts = {"A": 0, "C": 0, "G": 0, "T": 0}
+    for base in seq:
+        if base in counts:
+            counts[base] += 1
+    return counts
+
+def count_dinucleotides(seq):
+    counts = {"AA": 0, "AC": 0, "AG": 0, "AT": 0,
+              "CA": 0, "CC": 0, "CG": 0, "CT": 0,
+              "GA": 0, "GC": 0, "GG": 0, "GT": 0,
+              "TA": 0, "TC": 0, "TG": 0, "TT": 0}
+    for i in range(len(seq)-1):
+        dinucleotide = seq[i:i+2]
+        if dinucleotide in counts:
+            counts[dinucleotide] += 1
+    return counts
+
+
 
 
 
 
 # Load the data
-local_path = "Fasta_Pool2"
+local_path = "Fasta_Pool4"
 all_files = import_files(local_path)
 
 
@@ -103,7 +122,7 @@ for enh in enh_list:
                 mutation_entries[entry[1]] = []
             mutation_entries[entry[1]].append(file.file_class)
 
-    print(f"Enhancer {enh} has {len(mutation_entries)} mutations")
+    print(f"Enhancer {enh} {len(mutation_entries)} mutations")
 
     mut_counts = {}
 
@@ -111,12 +130,14 @@ for enh in enh_list:
         mut_counts[mut] = len(mutation_entries[mut])
 
 
-    bar_graph = {"1": 0, "2 or 3": 0, "4 to 10": 0, "10 to 100": 0, "100 to 1000": 0, "1000+": 0}
+    bar_graph = {"1": 0, "2":0, "3": 0, "4 to 10": 0, "10 to 100": 0, "100 to 1000": 0, "1000+": 0}
     for mut in mut_counts:
         if mut_counts[mut] == 1:
             bar_graph["1"] += 1
-        elif mut_counts[mut] == 2 or mut_counts[mut] == 3:
-            bar_graph["2 or 3"] += 1
+        elif mut_counts[mut] == 2:
+            bar_graph["2"] += 1
+        elif mut_counts[mut] == 3:
+            bar_graph["3"] += 1
         elif mut_counts[mut] >= 4 and mut_counts[mut] <= 10:
             bar_graph["4 to 10"] += 1
         elif mut_counts[mut] >= 10 and mut_counts[mut] <= 100:
@@ -128,6 +149,95 @@ for enh in enh_list:
 
     print(bar_graph)
 
+    plt.figure(figsize=(9, 7))
+    plt.bar(bar_graph.keys(), bar_graph.values())
+    plt.yscale("log")
+    plt.xlabel("Number of reads for the same variant")
+    plt.ylabel("Number of unique variants (log scale)")
+    plt.title(f'Number of Reads per Unique Variant in Clone {enh}')
+    plt.savefig(os.path.join(SAVE_DIR, f"{enh}_mutation_distribution.png"))
+    plt.close()
+
+
+    dataset = get_seq_label_pairs(enh_name = enh, local_path = local_path)
+    seqs, labels = dataset.keys(), dataset.values()
+    dataset = zip(seqs, labels)
+    dataset = list(dataset)
+
+    class_counts = {"MM": 0, "M":0, "NM": 0, "NP": 0, "P": 0, "PP": 0}
+    for i in range(len(dataset)):
+        seq, label = dataset[i]
+        if label not in class_counts:
+            class_counts[label] = 0
+        class_counts[label] += 1
+    # rename NM and NP to N and P
+    class_counts["M"] = class_counts["NM"]
+    class_counts["P"] = class_counts["NP"]
+    del class_counts["NM"]
+    del class_counts["NP"]
+
+    # print(class_counts)
+
+    plt.figure(figsize=(9, 7))
+    plt.bar(class_counts.keys(), class_counts.values())
+    plt.xlabel("Class")
+    plt.ylabel("Number of Unique Variants")
+    plt.title(f'Number of Unique Variants per Class in Clone {enh}')
+    plt.savefig(os.path.join(SAVE_DIR, f"{enh}_class_distribution.png"))
+    plt.close()
+
+    # plot in %
+    bar_graph = {}
+    total = sum(class_counts.values())
+    for key in class_counts:
+        bar_graph[key] = class_counts[key] / total * 100
+    # print(bar_graph)
+    plt.figure(figsize=(9, 7))
+    plt.bar(bar_graph.keys(), bar_graph.values())
+    plt.xlabel("Class")
+    plt.ylabel("Percentage of Unique Variants (%)")
+    plt.title(f'Percentage of Unique Variants per Class in Clone {enh}')
+    plt.savefig(os.path.join(SAVE_DIR, f"{enh}_class_distribution_perc.png"))
+    plt.close()
+
+
+    # plot nucleotide distribution
+    nucleotide_counts = {"A": 0, "C": 0, "G": 0, "T": 0}
+    for i in range(len(dataset)):
+        seq, label = dataset[i]
+        counts = count_nucleotides(seq)
+        for base in nucleotide_counts:
+            nucleotide_counts[base] += counts[base]/len(seq)/len(dataset)*100
+
+    dinucleotide_counts = {"AA": 0, "AC": 0, "AG": 0, "AT": 0,
+                          "CA": 0, "CC": 0, "CG": 0, "CT": 0,
+                          "GA": 0, "GC": 0, "GG": 0, "GT": 0,
+                          "TA": 0, "TC": 0, "TG": 0, "TT": 0}
+    for i in range(len(dataset)):
+        seq, label = dataset[i]
+        counts = count_dinucleotides(seq)
+        for base in dinucleotide_counts:
+            dinucleotide_counts[base] += counts[base]/len(seq)/len(dataset)*100
+
+    fig_nuc, ax_nuc = plt.subplots(1, 2, figsize=(15, 8))
+    ax_nuc[0].pie(nucleotide_counts.values(), labels=nucleotide_counts.keys(), autopct='%.1f%%')
+    ax_nuc[0].axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
+    ax_nuc[0].set_xlabel("Nucleotide")
+    ax_nuc[0].set_ylabel("Percentage of Nucleotides")
+    ax_nuc[0].set_title(f'Percentage of Nucleotides in Clone {enh}')
+    ax_nuc[1].pie(dinucleotide_counts.values(), labels=dinucleotide_counts.keys(), autopct='%.1f%%')
+    ax_nuc[1].axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
+    ax_nuc[1].set_xlabel("Dinucleotide")
+    ax_nuc[1].set_ylabel("Percentage of Dinucleotides")
+    ax_nuc[1].set_title(f'Percentage of Dinucleotides in Clone {enh}')
+    fig_nuc.suptitle(f"Enhancer {enh} nucleotide distribution")
+    plt.tight_layout()
+    plt.savefig(os.path.join(SAVE_DIR, f"{enh}_nucleotide_distribution.png"))
+    plt.close()
+
+
+
+    continue
     # plot in %
     bar_graph_perc = {}
     total = sum(bar_graph.values())

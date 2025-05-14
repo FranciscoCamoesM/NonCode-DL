@@ -1,7 +1,7 @@
 from data_preprocess import *
 import matplotlib.pyplot as plt
 
-from models import SignalPredictor1D, SignalPredictor1D_modified_kernel
+from models import SignalPredictor1D
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -17,7 +17,7 @@ parser = argparse.ArgumentParser(description='Train a model to predict enhancer 
 
 parser.add_argument('--id', type=int, default=None, help='Batch size for training')
 parser.add_argument('--w', type=int, default=3, help='Sie of the window to use for windowed mutagenesis. With 8 takes around 2 hours, with 7 around 30 minutes, and with 5 around 2 minutes.')
-parser.add_argument('--n_top', type=int, default=25, help='Number of top and bottom kmers to save')
+parser.add_argument('--n_top', type=int, default=250, help='Number of top and bottom kmers to save')
 parser.add_argument('--max_n_delete', type=int, default=15, help='Maximum number of deletions to do')
 
 args = parser.parse_args()
@@ -98,8 +98,8 @@ class Wrapper(nn.Module):
     def forward(self, x):
         out = self.model(x)
 
-        out = out[:,1] - out[:,0]
-        return out.unsqueeze(1)
+        # during training for mm_v_p, the label 1 was loss, so we need to take the negative of the output
+        return -out
 
 
 model = Wrapper(model)
@@ -111,6 +111,7 @@ model = Wrapper(model)
 # load original enhancer
 with open(f"original_enhancers.txt", "r") as f:
     enhancer = f.readlines()
+    print(enhancer)
     # format is >EnhancerName\n
     #               sequence\n
     # so select the line after the one with the enhancer name
@@ -151,7 +152,7 @@ for i in range(enhancer.shape[2]):
 
 y = np.array(y_reshaped)
 
-fig, ax = plt.subplots(2, 1, figsize=(len(y)//15, 6), sharex=True)
+fig, ax = plt.subplots(2, 1, figsize=(len(y)//15, 6), sharex=True, dpi=100)
 
 ax[0].set_title("Saturation Mutagenesis")
 # plot_logo(y.T, ax=ax[2])
@@ -168,6 +169,8 @@ ax[0].set_yticks([0, 1, 2, 3], ["A", "C", "G", "T"])
 
 
 plot_logo((y - wt_out).T, ax=ax[1])
+xticks = np.arange(0, len(y), step=25)
+ax[1].set_xticks(xticks, xticks - 25)
 
 # plot_logo((np.log(y / wt_out)).T, ax=ax[0])
 

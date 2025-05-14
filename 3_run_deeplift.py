@@ -16,10 +16,13 @@ import argparse
 parser = argparse.ArgumentParser(description='Train a model to predict enhancer activity')
 
 parser.add_argument('--id', type=int, default=None, help='Batch size for training')
+parser.add_argument('--datafolder', type=str, default="Fasta_Pool2", help='Folder with the data')
+parser.add_argument('--device', type=str, default="cuda", help='Device to use for training (cpu or cuda)')
 
 args = parser.parse_args()
 
 SAVE_DIR = 'saved_models'
+N_REFS = 200
 model_id = args.id
 
 if model_id is None:
@@ -78,7 +81,12 @@ N_CLASSES = len(list(LABELS.values())[0])
 # Load the model
 
 model = SignalPredictor1D(num_classes=N_CLASSES)
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+if args.device == "cuda":
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    if not torch.cuda.is_available():
+        print("CUDA is not available, using CPU instead")
+elif args.device == "cpu":
+    device = torch.device('cpu')
 model.load_state_dict(torch.load(f"{SAVE_DIR}/{model_name}.pt"))
 model.to(device)
 
@@ -93,14 +101,11 @@ class Wrapper(nn.Module):
     def forward(self, x):
         out = self.model(x)
 
-        out = out[:,1] - out[:,0]
-        return out.unsqueeze(1)
+        # during training for mm_v_p, the label 1 was loss, so we need to take the negative of the output
+        return -out
 
 
 model = Wrapper(model)
-
-
-
 
 
 # load original enhancer
@@ -118,13 +123,41 @@ pads = [pads, 250 - pads - enhancer_len]
 enhancer = pad_samples([(enhancer, "MM")], LABELS)[0][0]
 enhancer = torch.tensor(enhancer, dtype=torch.float32).unsqueeze(0).permute(0, 2, 1)
 
+
+# load training data
+dataloc = get_dataloc(ENHANCER_NAME)
+dataset = get_seq_label_pairs(enh_name = ENHANCER_NAME, local_path = dataloc)
+X = list(dataset.keys())
+y = list(dataset.values())
+dataset = EnhancerDataset(X, y, LABELS)
+dataloader = torch.utils.data.DataLoader(dataset, batch_size=N_REFS, shuffle=True, num_workers=4)
+
+for x, y in dataloader:
+    references = x.float()
+    print(f"References shape: {references.shape}")
+    break
+
+references = references.unsqueeze(0)
+references = references.repeat(enhancer.shape[0], 1, 1, 1)
+
+print(f"References shape: {references.shape}", "**"*50)
+
+
+
 # get the deep lift shap values
-reference_shap_values = deep_lift_shap(model, enhancer, hypothetical=True)
+# from tangermeme.utils import characters
+# for seq in references:
+#     print(characters(seq))
+# reference_shap_values = deep_lift_shap(model, enhancer, hypothetical=True, references=references, device=device)
+reference_shap_values = deep_lift_shap(model, enhancer, hypothetical=True, n_shuffles =N_REFS, device=device)
 
 
 fig, ax = plt.subplots(2, 1, figsize=(len(reference_shap_values[0][0])//15, 6))
 plot_logo(reference_shap_values[0].cpu().detach().numpy(), ax=ax[0])
 plot_logo(reference_shap_values[0].cpu().detach().numpy() * enhancer[0].cpu().detach().numpy(), ax=ax[1])
+xticks = np.arange(0, len(y), step=25)
+ax[0].set_xticks(xticks, xticks - 25)
+ax[1].set_xticks(xticks, xticks - 25)
 plt.savefig(f"explicability_figs/{ENHANCER_NAME}_{model_id}_shap.png")
 plt.close()
 
@@ -170,3 +203,5 @@ ax[2].set_xlabel("Position")
 plt.savefig(f"explicability_figs/{ENHANCER_NAME}_{model_id}_heatmap.png")
 # plt.show()
 plt.close()
+
+print("All done!")

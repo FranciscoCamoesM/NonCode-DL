@@ -10,4 +10,21 @@ data/
 aa.py
 modisco/
 
+cross_testing_figs/
 explicability_figs/
+Fasta_InSilico/
+Fasta_Pool3/
+meme_seqs/ 
+modisco/ 
+processed_data/
+saved_models/
+tangermeme/
+dataset_analysis/
+explicability_figs_old/
+Fasta_Pool2/ 
+Fasta_Pool4/
+model_comaprison/
+optuna_log/
+__pycache__/ 
+saved_models_try_2/
+temp_figs/

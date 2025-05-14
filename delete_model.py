@@ -1,4 +1,5 @@
 import argparse
+import os
 
 parser = argparse.ArgumentParser(description='Train a model to predict enhancer activity')
 

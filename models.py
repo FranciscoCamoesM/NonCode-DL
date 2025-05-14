@@ -87,7 +87,6 @@ import torch.nn.functional as F
 #       self.fc = nn.Linear(self.fc.in_features, n)
 
 
-
 class BasicBlock1D(nn.Module):
     expansion = 1
 
@@ -115,6 +114,7 @@ class BasicBlock1D(nn.Module):
         out = self.conv2(out)
         out = self.bn2(out)
         out += self.shortcut(residual)
+
         out = self.relu2(out)
         return out
 
@@ -166,3 +166,65 @@ class SignalPredictor1D(nn.Module):
 
     def swap_output_n(self, n):
         self.fc = nn.Linear(self.fc.in_features, n)
+
+
+class SignalPredictor_Abstract(nn.Module):
+    def __init__(self, num_datasets):
+        super(SignalPredictor_Abstract, self).__init__()
+        self.in_channels = 64
+
+        self.flatten_dim = 128
+        self.num_classes = 1
+        self.num_datasets = num_datasets
+
+        self.abstract = False
+
+        self.conv1 = nn.Conv1d(4, 64, kernel_size=7, stride=1, padding=3) # Adjust padding accordingly
+        self.sig1 = nn.Sigmoid()
+
+        self.layer1 = self._make_layer(BasicBlock1D, 64, 1, stride=1)
+        self.layer2 = self._make_layer(BasicBlock1D, self.flatten_dim, 1, stride=2)
+
+        self.avgpool = nn.AdaptiveAvgPool1d(1)
+        
+        # Fully connected layers
+        self.fc1 = nn.Linear(self.flatten_dim * BasicBlock1D.expansion, 1)
+
+        self.deabstract = nn.Linear(1, num_datasets)
+
+        self.sig = nn.Sigmoid()
+
+    def _make_layer(self, block, out_channels, num_blocks, stride):
+        strides = [stride] + [1] * (num_blocks - 1)
+        layers = []
+        for stride in strides:
+            layers.append(block(self.in_channels, out_channels, stride))
+            self.in_channels = out_channels * block.expansion
+        return nn.Sequential(*layers)
+
+    def forward(self, x, input_heads=None):
+        x = self.conv1(x)
+        x = self.sig1(x)
+
+        x = self.layer1(x)
+        x = self.layer2(x)
+
+        x = self.avgpool(x)
+        x = x.view(x.size(0), -1)
+        
+        x = self.fc1(x)
+
+        if self.abstract:
+            return x
+
+        x = self.deabstract(x)
+        
+        if input_heads is None:
+            raise ValueError("input_heads must be provided when abstract is False.")
+
+        # Select specific outputs based on input_heads
+        if len(input_heads) > x.shape[0]:
+            input_heads = input_heads[:x.shape[0]]
+        selected = torch.stack([x[i, head] for i, head in enumerate(input_heads)]).unsqueeze(1)
+        
+        return selected
