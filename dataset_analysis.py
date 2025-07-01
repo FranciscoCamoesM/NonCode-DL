@@ -97,7 +97,7 @@ def count_dinucleotides(seq):
 
 
 # Load the data
-local_path = "Fasta_Pool4"
+local_path = "Fasta_Pool5"
 all_files = import_files(local_path)
 
 

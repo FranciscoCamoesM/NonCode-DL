@@ -1,4 +1,5 @@
 from data_preprocess import *
+from training_funcs import train, gen_sampler_weights
 import matplotlib.pyplot as plt
 
 from models import SignalPredictor1D
@@ -10,26 +11,6 @@ from sklearn.model_selection import train_test_split
 import numpy as np
 from tqdm import tqdm
 
-
-def gen_sampler_weights(data, n_classes):
-    weights = []
-    if n_classes <= 2:
-        class_count = [0, 0]
-        for _, label in data:
-            class_count[int(label)] += 1
-
-        for _, label in data:
-            weights.append(1/class_count[int(label)])
-
-    else:
-        class_count = [0, 0, 0, 0]
-        for _, label in data:
-            class_count[np.argmax(label)] += 1
-
-        for _, label in data:
-            weights.append(1/class_count[np.argmax(label)])
-
-    return torch.DoubleTensor(weights)
 
 
 ### BEGGINIGN OF THE CODE ###
@@ -46,10 +27,11 @@ parser.add_argument('--wd', type=float, default=1e-5, help='Weight decay for the
 parser.add_argument('--mom', type=float, default=None, help='Momentum for the optimizer')
 parser.add_argument('--optim', type=str, default='adam', help='Optimizer to use')
 parser.add_argument('--best_val', type=bool, default=True, help='Whether to save the best model based on validation accuracy')
-parser.add_argument('--datafolder', type=str, default='Fasta_Pool2', help='Folder where the data is stored')
 parser.add_argument('--optuna', type=bool, default=False, help='Whether to use optuna for hyperparameter optimization')
 parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
 parser.add_argument('--pad', type=bool, default=True, help='Whether to pad the sequences with cassette or leave it with Ns')
+parser.add_argument('--coverage', type=int, default=1, help='Coverage for the enhancer')
+parser.add_argument('--jiggle', type=int, default=None, help='Jiggle the sequences by this many bases to both sides')
 args = parser.parse_args()
 
 PADDING = args.pad
@@ -62,12 +44,13 @@ N_EPOCHS = args.epochs
 WEIGHT_DECAY = args.wd
 MOM = args.mom
 OPTIM = args.optim
-SUBSET = args.subset
 BEST_VAL = args.best_val
-DATA_FOLDER = args.datafolder
+DATA_FOLDER = get_dataloc(ENHANCER_NAME)
+COVERAGE = args.coverage
+JIGGLE = args.jiggle
 SEED = args.seed
 
-SAVE_DIR = 'saved_models'
+SAVE_DIR = 'saved_models_final'
 
 
 
@@ -76,7 +59,10 @@ N_CLASSES = len(list(LABELS.values())[0])
 
 
 # Load the data
-dataset = get_seq_label_pairs(enh_name = ENHANCER_NAME, local_path = DATA_FOLDER)
+if COVERAGE < 2:
+    dataset = get_seq_label_pairs(enh_name = ENHANCER_NAME, local_path = DATA_FOLDER)
+else:
+    dataset = get_coverage_seq_label_pairs(enh_name = ENHANCER_NAME, local_path = DATA_FOLDER, coverage = COVERAGE)
 
 # Split the data
 X = list(dataset.keys())
@@ -87,8 +73,8 @@ if SUBSET < 1.0:
     X = X[:int(len(X) * SUBSET)]
     y = y[:int(len(y) * SUBSET)]
 
-X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=0.2, random_state=SEED)
-X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=SEED)
+X_temp, X_test, y_temp, y_test = train_test_split(X, y, test_size=0.2, random_state=SEED)
+X_train, X_val, y_train, y_val,  = train_test_split(X_temp, y_temp, test_size=0.2, random_state=SEED)
 del X_temp, y_temp
 
 
@@ -102,18 +88,23 @@ if SUBSET < 1.0:
 
 
 # Create a data loader
-train_dataset = EnhancerDataset(X_train, y_train, LABELS, PADDING = PADDING)
-val_dataset = EnhancerDataset(X_val, y_val, LABELS, PADDING = PADDING)
-test_dataset = EnhancerDataset(X_test, y_test, LABELS, PADDING = PADDING)
+if JIGGLE is None:
+    train_dataset = EnhancerDataset(X_train, y_train, LABELS, PADDING = PADDING)
+    val_dataset = EnhancerDataset(X_val, y_val, LABELS, PADDING = PADDING)
+    test_dataset = EnhancerDataset(X_test, y_test, LABELS, PADDING = PADDING)
+else:
+    train_dataset = EnhancerDataset(X_train, y_train, LABELS, PADDING = PADDING, jiggle_range=JIGGLE)
+    val_dataset = EnhancerDataset(X_val, y_val, LABELS, PADDING = PADDING, jiggle_range=JIGGLE)
+    test_dataset = EnhancerDataset(X_test, y_test, LABELS, PADDING = PADDING, jiggle_range=JIGGLE)
 
 train_weights = gen_sampler_weights(train_dataset, N_CLASSES)
 val_weights = gen_sampler_weights(val_dataset, N_CLASSES)
 train_sampler = torch.utils.data.sampler.WeightedRandomSampler(train_weights, len(train_dataset), replacement=True)
 val_sampler = torch.utils.data.sampler.WeightedRandomSampler(val_weights, len(val_dataset), replacement=True)
 
-train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, sampler=train_sampler)
-val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, sampler=val_sampler)
-test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
+train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, sampler=train_sampler, num_workers=4)
+val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, sampler=val_sampler, num_workers=4)
+test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=4)
 
 
 print("Train size: ", len(train_dataset))
@@ -165,80 +156,11 @@ else:
     raise ValueError("Invalid optimizer")
 
 
-if N_CLASSES <= 2:
-    def count_corrects(output, target):
-        preds = torch.round(torch.sigmoid(output))
-        return torch.sum(preds == target)
-else:
-    def count_corrects(output, target):
-        preds = torch.argmax(output, dim=1)
-        return torch.sum(preds == torch.argmax(target, dim=1))
-
-
 print("Running on: ", device)
 
 
-def train(model, train_loader, val_loader, criterion, optimizer, num_epochs):
-    best_model = None
-    best_acc = 0.0
-    train_losses = []
-    train_accs = []
-    val_losses = []
-    val_accs = []
 
-    with tqdm(total=num_epochs) as pbar:
-        for epoch in range(num_epochs):
-            model.train()
-            train_loss = 0.0
-            running_corrects = 0
-            running_total = 0
-            for i, (data, target) in enumerate(train_loader):
-                data, target = data.to(device), target.to(device)
-                data = data.float()
-                target = target.float()
-
-                optimizer.zero_grad()
-                output = model(data)
-                loss = criterion(output, target)
-                loss.backward()
-                optimizer.step()
-                train_loss += loss.item()
-                running_corrects += count_corrects(output, target)
-                running_total += len(target)
-            train_losses.append(train_loss / len(train_loader))
-            train_accs.append(running_corrects.item() / running_total)
-
-            model.eval()
-            val_loss = 0.0
-            running_corrects = 0
-            running_total = 0
-            for i, (data, target) in enumerate(val_loader):
-                data, target = data.to(device), target.to(device)
-                data = data.float()
-                target = target.float()
-                output = model(data)
-                loss = criterion(output, target)
-                val_loss += loss.item()
-                running_corrects += count_corrects(output, target)
-                running_total += len(target)
-            val_losses.append(val_loss / len(val_loader))
-            val_accs.append(running_corrects.item() / running_total)
-            if val_accs[-1] > best_acc:
-                best_acc = val_accs[-1]
-                best_model = model.state_dict()
-
-            # print(f'Epoch {epoch}, Train Loss: {train_losses[-1]}, Test Loss: {val_losses[-1]}, Train Acc: {train_accs[-1]}, Test Acc: {val_accs[-1]} {"<-- new best!" if val_accs[-1] > best_acc else ""}')
-            pbar.set_postfix({'train_acc': train_accs[-1], 'val_acc': val_accs[-1], 'train_loss': train_losses[-1], 'val_loss': val_losses[-1]})
-            pbar.update(1)
-            pbar.set_description(f'Epoch {epoch+1}/{num_epochs}')
-            pbar.refresh()
-
-    if BEST_VAL:
-        model.load_state_dict(best_model)
-
-    return train_losses, val_losses
-
-train_losses, val_losses = train(model, train_loader, val_loader, criterion, optimizer, num_epochs=N_EPOCHS)
+train_losses, val_losses, train_accs, val_accs = train(model, train_loader, val_loader, criterion, optimizer, num_epochs=N_EPOCHS, device=device, BEST_VAL=BEST_VAL, binary=(N_CLASSES <= 2), early_stopping_patience=100)
 
 if not args.optuna:
     fig, ax = plt.subplots( 1, 2)
@@ -285,6 +207,7 @@ print(all_preds[:5])
 print(all_targets[:5])
 
 cm = confusion_matrix(all_targets, all_preds)
+un_normalized_cm = cm.copy()  # Keep the unnormalized confusion matrix for saving
 cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]         #normalize the confusion matrix
 
 if not args.optuna:
@@ -296,14 +219,18 @@ if not args.optuna:
     plt.ylabel('True')
     plt.title('Confusion Matrix of enhancer ' + str(ENHANCER_NAME) + ' on ' + str(LABEL_TITLE))
     plt.show()
-
+    
 
 # Save the model
 import os
 import datetime
 now = datetime.datetime.now()
 
-model_name = f"{now.strftime('%H%M%S_%m%d')}_{ENHANCER_NAME}_{LABEL_TITLE}"
+
+model_id = now.strftime('%j%H%M%S_%m%d')
+
+model_name = f"{model_id}_{ENHANCER_NAME}_{LABEL_TITLE}"
+
 
 if not args.optuna:
     # save model, confustion matrix, training history, and parameters all in different files
@@ -327,6 +254,22 @@ plt.title(plt_title)
 
 if not args.optuna:
     plt.savefig(f"{SAVE_DIR}/plots/{model_name}_cm.png")
+    plt.close()
+
+
+    plt.figure()
+    plt.plot(train_losses, label='Train Loss')
+    plt.plot(val_losses, label='Validation Loss', c = 'orange')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.title('Loss of enhancer ' + str(ENHANCER_NAME) + ' on ' + str(LABEL_TITLE))
+    if SUBSET < 1.0:
+        plt.title(f"Loss of enhancer {ENHANCER_NAME} on {LABEL_TITLE} (Subset: {SUBSET*100}%)")
+    plt.savefig(f"{SAVE_DIR}/plots/{model_name}_loss.png")
+    plt.close()
+
+
 
     with open(f"{SAVE_DIR}/{model_name}_params.txt", 'w') as f:
         f.write(f"Enhancer: {ENHANCER_NAME}\n")
@@ -340,6 +283,17 @@ if not args.optuna:
         if MOM is not None:
             f.write(f"Momentum: {MOM}\n")
         f.write(f"Optimizer: {OPTIM}\n")
+        f.write(f"Coverage: {COVERAGE}\n")
+        if JIGGLE is not None:
+            f.write(f"Jiggle: {JIGGLE}\n")
+
+        # record the metrics
+        f.write(f"Confusion Matrix: {cm.tolist()}\n")
+        f.write(f"Unnormalized Confusion Matrix: {un_normalized_cm.tolist()}\n")
+        f.write(f"Number of Epochs: {len(train_losses)}\n")
+        f.write(f"Train Losses: {train_losses}\n")
+        f.write(f"Validation Losses: {val_losses}\n")
+
 
 
 print("Model saved as: ", model_name)

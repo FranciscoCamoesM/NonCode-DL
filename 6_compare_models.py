@@ -11,27 +11,27 @@ import numpy as np
 
 class ModelInfo():
     # init model id, and fetch model info about enh, dataloc, etc.
-    def __init__(self, model_id):
+    def __init__(self, model_id, saved_models_dir = "saved_models"):
         self.model_id = model_id
+        self.saved_models_dir = saved_models_dir
         self.model_info = self.get_model_info(model_id)
         self.enh = self.model_info['Enhancer']
         self.dataloc = get_dataloc(self.enh)
 
-        for f in os.listdir('saved_models'):
+        for f in os.listdir(self.saved_models_dir):
             if f.startswith(str(model_id)):
                 if f.endswith('.pt'):
-                    self.model_path = 'saved_models/' + f
+                    self.model_path = os.path.join(self.saved_models_dir, f)
                     break
         
         if self.model_path is None:
             raise ValueError(f"Model path not found for model id: {model_id}")
 
     def get_model_info(self, model_id):
-        for f in os.listdir('saved_models'):
-            # find "saved_models/103432_0327_E22P3G3_mm_v_all_params.txt"
+        for f in os.listdir(self.saved_models_dir):
             if f.startswith(str(model_id)):
                 if f.endswith('params.txt'):
-                    with open('saved_models/' + f, 'r') as file:
+                    with open(os.path.join(self.saved_models_dir, f), 'r') as file:
                         lines = file.readlines()
                         model_info = {}
                         for line in lines:
@@ -48,14 +48,11 @@ class ModelInfo():
         return model
 
 
-savedir = "model_comaprison/E25E10_different_labels"
+savedir = "model_comaprison/final_model_test"
 
 if not os.path.exists(savedir):
     os.makedirs(savedir)
 
-
-model_ref = 175800
-model_test = 170543
 
 PADDING = True
 
@@ -68,27 +65,24 @@ PADDING = True
 # models = [135230, 145614, 162929, 131953, 105959, 105933, 104814] #ANK
 # models = [104335, 152018, 175800]
 # models = [112258, 121329, 170543]
-models = [162929, 152732]
+SAVED_MODELS_DIR = "saved_models_final"
+models = [180180434, 180202549, 180183942, 181002631, 180195946]
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 for model_ref_n in models:
+    model_ref_info = ModelInfo(model_ref_n, saved_models_dir=SAVED_MODELS_DIR)
+    model_ref = model_ref_info.load_model().to(device)
+
     for model_test_n in models:
         if model_ref_n == model_test_n:
             continue
             
-        if PADDING:
-            NAME = f"pad_{model_ref_n}_{model_test_n}"
-        else:
-            NAME = f"nopad_{model_ref_n}_{model_test_n}"
+        NAME = f"{model_ref_n}_{model_test_n}"
 
-
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-            
-        model_ref_info = ModelInfo(model_ref_n)
-        model_test_info = ModelInfo(model_test_n)
-        print(f"Model Ref: {model_ref_info.enh}, Model Test: {model_test_info.enh}")
-        model_ref = model_ref_info.load_model().to(device)
+        model_test_info = ModelInfo(model_test_n, saved_models_dir=SAVED_MODELS_DIR)
         model_test = model_test_info.load_model().to(device)
+        print(f"Model Ref: {model_ref_info.enh}, Model Test: {model_test_info.enh}")
 
         LABELS = preset_labels(model_ref_info.model_info['Label'])
 
@@ -122,7 +116,7 @@ for model_ref_n in models:
 
         # plot output
 
-        fig = plt.figure(figsize=(10, 10))
+        fig = plt.figure(figsize=(12, 12))
         gs = GridSpec(4, 4)
 
         ax_main = fig.add_subplot(gs[1:4, 0:3])
@@ -158,6 +152,12 @@ for model_ref_n in models:
         else:
             ax_y_hist.set_title(f'Model Test trained on {model_test_info.enh}')
 
+        # calculate r_score
+        from scipy.stats import pearsonr
+        r_score = pearsonr(model_ref_output, model_test_output)[0][0]
+        ax_main.text(0.05, 0.95, f'R: {r_score:.2f}', transform=ax_main.transAxes, fontsize=14,
+                     verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
+
         plt.setp(ax_x_hist.get_xticklabels(), visible=False)
         plt.setp(ax_y_hist.get_yticklabels(), visible=False)
 
@@ -165,6 +165,8 @@ for model_ref_n in models:
         plt.savefig(f'{savedir}/{NAME}_model_ref_vs_model_test.png')
         plt.show()
         plt.close()
+
+        continue
 
 
         # fig, ax = plt.subplots(2, 1, figsize=(10, 10))
@@ -202,17 +204,17 @@ for model_ref_n in models:
 
         print(f"Model Test F1 Score: {best_f1}, threshold: {best_threshold}, sign: {best_sign}")
 
-        plt.figure(figsize=(10, 5))
-        plt.plot([x[0] for x in h if x[1] > 0], [x[1] for x in h if x[1] > 0], label='F1 Score')
-        plt.plot([x[0] for x in h if x[1] < 0], [x[1] for x in h if x[1] < 0], label='Negative F1 Score')
-        plt.xlabel('Threshold')
-        plt.ylabel('F1 Score')
-        plt.title('F1 Score vs Threshold')
-        plt.axhline(y=best_f1, color='r', linestyle='--')
-        plt.axhline(y=-best_f1, color='r', linestyle='--')
-        plt.axvline(x=best_threshold, color='g', linestyle='--')
-        plt.savefig(f'{savedir}/{NAME}_f1_score_vs_threshold.png')
-        plt.show()
+        # plt.figure(figsize=(10, 5))
+        # plt.plot([x[0] for x in h if x[1] > 0], [x[1] for x in h if x[1] > 0], label='F1 Score')
+        # plt.plot([x[0] for x in h if x[1] < 0], [x[1] for x in h if x[1] < 0], label='Negative F1 Score')
+        # plt.xlabel('Threshold')
+        # plt.ylabel('F1 Score')
+        # plt.title('F1 Score vs Threshold')
+        # plt.axhline(y=best_f1, color='r', linestyle='--')
+        # plt.axhline(y=-best_f1, color='r', linestyle='--')
+        # plt.axvline(x=best_threshold, color='g', linestyle='--')
+        # plt.savefig(f'{savedir}/{NAME}_f1_score_vs_threshold.png')
+        # plt.show()
 
 
         # compute confusion matrix
@@ -226,45 +228,45 @@ for model_ref_n in models:
         confusion_test = confusion_test.astype('float') / confusion_test.sum(axis=1)[:, np.newaxis]
         confusion_test_best = confusion_test_best.astype('float') / confusion_test_best.sum(axis=1)[:, np.newaxis]
 
-        # plot confusion matrix
-        fig, ax = plt.subplots(1, 3, figsize=(20, 10))
-        ax[0].imshow(confusion_ref, cmap='Blues', vmin=0, vmax=1)
-        ax[0].set_xlabel('Predicted')
-        ax[0].set_ylabel('True')
-        ax[0].set_xticks([0, 1])
-        ax[0].set_xticklabels(['Negative', 'Positive'])
-        ax[0].set_yticks([0, 1])
-        ax[0].set_yticklabels(['Negative', 'Positive'])
-        ax[1].imshow(confusion_test, cmap='Blues', vmin=0, vmax=1)
-        ax[1].set_xlabel('Predicted')
-        ax[1].set_ylabel('True')
-        ax[1].set_xticks([0, 1])
-        ax[1].set_xticklabels(['Negative', 'Positive'])
-        ax[1].set_yticks([0, 1])
-        ax[1].set_yticklabels(['Negative', 'Positive'])
-        ax[2].imshow(confusion_test_best, cmap='Blues', vmin=0, vmax=1)
-        ax[2].set_xlabel('Predicted')
-        ax[2].set_ylabel('True')
-        ax[2].set_xticks([0, 1])
-        ax[2].set_xticklabels(['Negative', 'Positive'])
-        ax[2].set_yticks([0, 1])
-        ax[2].set_yticklabels(['Negative', 'Positive'])
-        if model_ref_info.enh == model_test_info.enh:
-            ax[0].set_title(f'Confusion Matrix of Model {model_ref_info.model_id} on task {model_ref_info.model_info["Label"]}')
-            ax[1].set_title(f'Confusion Matrix of Model {model_test_info.model_id} on task {model_ref_info.model_info["Label"]}')
-            ax[2].set_title(f'Confusion Matrix of Model {model_test_info.model_id} on task {model_ref_info.model_info["Label"]} (Best Threshold)')
-        else:
-            ax[0].set_title(f'Confusion Matrix of Model Trained on {model_ref_info.enh} ({model_ref_info.enh})')
-            ax[1].set_title(f'Confusion Matrix on dataset {model_ref_info.enh} of Model Trained on {model_test_info.enh}')
-            ax[2].set_title(f'Confusion Matrix on dataset {model_ref_info.enh} of Model Trained on {model_test_info.enh} (Best Threshold)')
+        # # plot confusion matrix
+        # fig, ax = plt.subplots(1, 3, figsize=(20, 10))
+        # ax[0].imshow(confusion_ref, cmap='Blues', vmin=0, vmax=1)
+        # ax[0].set_xlabel('Predicted')
+        # ax[0].set_ylabel('True')
+        # ax[0].set_xticks([0, 1])
+        # ax[0].set_xticklabels(['Negative', 'Positive'])
+        # ax[0].set_yticks([0, 1])
+        # ax[0].set_yticklabels(['Negative', 'Positive'])
+        # ax[1].imshow(confusion_test, cmap='Blues', vmin=0, vmax=1)
+        # ax[1].set_xlabel('Predicted')
+        # ax[1].set_ylabel('True')
+        # ax[1].set_xticks([0, 1])
+        # ax[1].set_xticklabels(['Negative', 'Positive'])
+        # ax[1].set_yticks([0, 1])
+        # ax[1].set_yticklabels(['Negative', 'Positive'])
+        # ax[2].imshow(confusion_test_best, cmap='Blues', vmin=0, vmax=1)
+        # ax[2].set_xlabel('Predicted')
+        # ax[2].set_ylabel('True')
+        # ax[2].set_xticks([0, 1])
+        # ax[2].set_xticklabels(['Negative', 'Positive'])
+        # ax[2].set_yticks([0, 1])
+        # ax[2].set_yticklabels(['Negative', 'Positive'])
+        # if model_ref_info.enh == model_test_info.enh:
+        #     ax[0].set_title(f'Confusion Matrix of Model {model_ref_info.model_id} on task {model_ref_info.model_info["Label"]}')
+        #     ax[1].set_title(f'Confusion Matrix of Model {model_test_info.model_id} on task {model_ref_info.model_info["Label"]}')
+        #     ax[2].set_title(f'Confusion Matrix of Model {model_test_info.model_id} on task {model_ref_info.model_info["Label"]} (Best Threshold)')
+        # else:
+        #     ax[0].set_title(f'Confusion Matrix of Model Trained on {model_ref_info.enh} ({model_ref_info.enh})')
+        #     ax[1].set_title(f'Confusion Matrix on dataset {model_ref_info.enh} of Model Trained on {model_test_info.enh}')
+        #     ax[2].set_title(f'Confusion Matrix on dataset {model_ref_info.enh} of Model Trained on {model_test_info.enh} (Best Threshold)')
 
 
-        # write the numbers on the confusion matrix
-        for i in range(2):
-            for j in range(2):
-                ax[0].text(j, i, f'{confusion_ref[i, j]:.2f}', ha='center', va='center', color='black')
-                ax[1].text(j, i, f'{confusion_test[i, j]:.2f}', ha='center', va='center', color='black')
-                ax[2].text(j, i, f'{confusion_test_best[i, j]:.2f}', ha='center', va='center', color='black')
-        plt.tight_layout()
-        plt.savefig(f'{savedir}/{NAME}_confusion_matrix.png')
-        plt.show()
+        # # write the numbers on the confusion matrix
+        # for i in range(2):
+        #     for j in range(2):
+        #         ax[0].text(j, i, f'{confusion_ref[i, j]:.2f}', ha='center', va='center', color='black')
+        #         ax[1].text(j, i, f'{confusion_test[i, j]:.2f}', ha='center', va='center', color='black')
+        #         ax[2].text(j, i, f'{confusion_test_best[i, j]:.2f}', ha='center', va='center', color='black')
+        # plt.tight_layout()
+        # plt.savefig(f'{savedir}/{NAME}_confusion_matrix.png')
+        # plt.show()
