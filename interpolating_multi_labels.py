@@ -1,68 +1,50 @@
 import matplotlib.pyplot as plt
 from data_preprocess import *
+from sklearn.metrics import mean_squared_error, r2_score
+import os
 
 AA = 1
-BB = .475
-COVERAGE = 5
+BB = .45/.95
 lv =  {"MM": -AA, "NM": -BB, "NP":BB, "PP":AA}
 
 
+import argparse
+parser = argparse.ArgumentParser(description='Process some integers.')
+parser.add_argument('--coverage', type=int, default=75, help='Coverage value')
+parser.add_argument('--enh', type=str, default="E25E102", help='Enhancer name')
+parser.add_argument('--wd', type=float, default=1e-6, help='Weight decay')
+parser.add_argument('--lr', type=float, default=1e-5, help='Learning rate')
+parser.add_argument('--epochs', type=int, default=10000, help='Number of epochs')
+parser.add_argument('--batch_size', type=int, default=256, help='Batch size')
+parser.add_argument('--jiggle', type=int, default=5, help='Jiggle value')
+parser.add_argument('--es_patience', type=int, default=200, help='Early stopping patience')
 
-ENH_LIST = [#[75, "E22P1A3", np.array([23731, 69026, 57444, 15199])],
-                [75, "E25E102", np.array([74226,107443,103524,7799])],
-                [75, "E25E10R3", np.array([68519,111643,60318,5687])],
-                # [10, "E25B2", np.array([14866,63461,30286,3838])]
-                ]
+args = parser.parse_args()
 
-# ENH_LIST = [
-#                 [7, "E18C2", np.array([3135, 4108, 3866, 501])],
-#                 [7, "E22P3F2", np.array([1957, 8165, 7623, 689])],
-#                 [10, "E24C3", np.array([11765, 31087, 21297, 2339])]
-#                 ]
-
-
-# ENH_LIST = [
-#                 [25, "E22P1D10", np.array([8867, 26445, 31755, 6627])],
-#                 # [5, "E22P3B3", np.array([8931, 9735, 7685, 635])],
-#                 # [25, "E22P3B3R3", np.array([12001, 17423, 10126, 1234])]
-#                 ]
-
-ENH_LIST = [
-                [25, "E22P1F10", np.array([33005, 50888, 40371, 4975])],
-                ]
-
+COVERAGE = args.coverage
+ENH = args.enh
+BIN_CELLS = get_bin_cells(ENH)
+WD = args.wd
+LR = args.lr
+EPOCHS = args.epochs
+BATCH_SIZE = args.batch_size
+JIGGLE = args.jiggle
+ES_patience = args.es_patience
 
 
-
-# ENH_LIST = [ 
-#                 # [100, "E22P1A3", np.array([23731, 69026, 57444, 15199])],
-#                 # # [10, "E24A3", np.array([1, 1, 1, 1])],
-#                 # # [25, "E25E10", np.array([1, 1, 1, 1])],
-#                 # [100, "E25E102", np.array([74226,107443,103524,7799])],
-#                 # [100, "E25E10R3", np.array([68519,111643,60318,5687])],
-#                 # [10, "E25B2", np.array([14866,63461,30286,3838])],
-#                 # # [10, "E25B3", np.array([9327,39125,25464,2188])],
-#                 # [1, "E18C2", np.array([3135, 4108, 3866, 501])],
-#                 [50, "E22P3F2", np.array([1957, 8165, 7623, 689])],
-#                 [100, "E24C3", np.array([11765, 31087, 21297, 2339])],
-#                 [25, "E22P1D10", np.array([8867, 26445, 31755, 6627])],
-#                 # [3, "E22P3B3", np.array([8931, 9735, 7685, 635])],
-#                 [100, "E22P3B3R3", np.array([12001, 17423, 10126, 1234])],
-#                 [25, "E22P1C1", np.array([2152, 6691, 4350, 258])],
-#                 [50, "E22P3B4", np.array([5112, 24376, 19383, 2478])],
-#                 [20, "E22P2F4", np.array([4919, 16352, 9135, 534])],
-#                 [20, "E22P3G3", np.array([3644, 10704, 6332, 443])]]
-
-ENH_LIST = [ENH_LIST[0]]
-
-
-BATCH_SIZE = 256
-JIGGLE = 3
+ENH_LIST = [[COVERAGE, ENH, BIN_CELLS]]
 
 data = []
 for enh_data in ENH_LIST:
     coverage, enh_name, bin_cells = enh_data
     data.append(get_interpolated_seq_label_pairs(coverage=coverage, label_values=lv, enh_name=enh_name, local_path=get_dataloc(enh_name), BIN_CELLS=bin_cells))
+
+
+print("Number of sequences:", sum(len(d) for d in data))
+if sum(len(d) for d in data) < 1000:
+    raise ValueError(f"Not enough sequences for training: {sum(len(d) for d in data)}. At least 1000 sequences are required.")
+
+
 
 if len(ENH_LIST)== 1:
     enh_name = ENH_LIST[0][1]
@@ -70,10 +52,13 @@ else:
     enh_name = "mixed"
 
 save_dir = f"regression_models/{enh_name}/"
+
+# current date
+from datetime import datetime
+current_date = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+save_dir = f"{save_dir}{current_date}/"
+
 os.makedirs(save_dir, exist_ok=True)
-
-
-print("Number of sequences:", sum(len(d) for d in data))
 
 # # normalize values
 # def normalize_values(values, percentiles=35):
@@ -155,127 +140,6 @@ from models import SignalPredictor1D
 import torch
 import torch.nn as nn
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-class ComplexModel(torch.nn.Module):
-    def __init__(self, num_classes=1):
-        super(ComplexModel, self).__init__()
-        self.conv1 = nn.Conv1d(4, 128, kernel_size=7, padding=3)
-        self.relu1 = nn.ReLU()
-        self.conv2 = nn.Conv1d(128, 128, kernel_size=7, padding=3)
-        self.relu2 = nn.ReLU()
-        self.pool1 = nn.MaxPool1d(2)
-
-        self.conv3 = nn.Conv1d(128, 128, kernel_size=7, padding=3)
-        self.relu3 = nn.ReLU()
-        self.conv4 = nn.Conv1d(128, 128, kernel_size=7, padding=3)
-        self.relu4 = nn.ReLU()
-        self.pool2 = nn.MaxPool1d(2)
-
-        self.conv5 = nn.Conv1d(128, 128*2, kernel_size=15, padding=0)
-        self.relu5 = nn.ReLU()
-        self.dropout1 = nn.Dropout(0.1)
-        self.conv6 = nn.Conv1d(128*2, 128*4, kernel_size=25, padding=0)
-        self.relu6 = nn.ReLU()
-        self.dropout2 = nn.Dropout(0.1)
-        self.pool3 = nn.MaxPool1d(2)
-
-        # self.conv7 = nn.Conv1d(128 * 4, 128 * 8, kernel_size=5, padding=1)
-        # self.bn7 = nn.BatchNorm1d(128 * 8)
-        # self.relu7 = nn.ReLU()
-        # self.conv8 = nn.Conv1d(128 * 8, 128 * 8, kernel_size=5, padding=1)
-        # self.bn8 = nn.BatchNorm1d(128 * 8)
-        # self.relu8 = nn.ReLU()
-        # self.pool4 = nn.MaxPool1d(2)
-
-        self.fc1 = nn.Linear(128 * 24 * 2, 128*4)
-        self.relufc1 = nn.ReLU()
-        self.fc2 = nn.Linear(128*4, 128)
-        self.relufc2 = nn.ReLU()
-        self.fc3 = nn.Linear(128, num_classes)
-
-        # self.normalization = nn.Linear(1, num_classes)
-
-    def forward(self, x):
-        x = self.conv1(x)
-        x = self.relu1(x)
-        x = self.conv2(x)
-        x = self.relu2(x)
-        x = self.pool1(x)
-
-        x = self.conv3(x)
-        x = self.relu3(x)
-        x = self.conv4(x)
-        x = self.relu4(x)
-        x = self.pool2(x)
-
-        x = self.conv5(x)
-        x = self.relu5(x)
-        x = self.dropout1(x)
-        x = self.conv6(x)
-        x = self.relu6(x)
-        x = self.dropout2(x)
-        x = self.pool3(x)
-
-        # x = self.conv7(x)
-        # x = self.bn7(x)
-        # x = self.relu7(x)
-        # x = self.conv8(x)
-        # x = self.bn8(x)
-        # x = self.relu8(x)
-        # x = self.pool4(x)
-
-        # print(f"Shape after conv layers: {x.shape}")
-
-        x = x.view(-1, 128 * 24 * 2)
-        x = self.fc1(x)
-        x = self.relufc1(x)
-        x = self.fc2(x)
-        x = self.relufc2(x)
-        x = self.fc3(x)
-        # x = self.normalization(x)
-
-        return x
-    
-    def abstract(self, x):
-        x = self.conv1(x)
-        x = self.relu1(x)
-        x = self.conv2(x)
-        x = self.relu2(x)
-        x = self.pool1(x)
-
-        x = self.conv3(x)
-        x = self.relu3(x)
-        x = self.conv4(x)
-        x = self.relu4(x)
-        x = self.pool2(x)
-
-        x = self.conv5(x)
-        x = self.relu5(x)
-        x = self.dropout1(x)
-        x = self.conv6(x)
-        x = self.relu6(x)
-        x = self.dropout2(x)
-        x = self.pool3(x)
-
-        # x = self.conv7(x)
-        # x = self.bn7(x)
-        # x = self.relu7(x)
-        # x = self.conv8(x)
-        # x = self.bn8(x)
-        # x = self.relu8(x)
-        # x = self.pool4(x)
-
-        # print(f"Shape after conv layers: {x.shape}")
-
-        x = x.view(-1, 128 * 24 * 2)
-        x = self.fc1(x)
-        x = self.relufc1(x)
-        x = self.fc2(x)
-        x = self.relufc2(x)
-        x = self.fc3(x)
-        x = torch.mean(x, dim=1, keepdim=True)  # Average over the batch dimension
-
-        return x
-
 
 # model = ComplexModel(num_classes=len(ENH_LIST))
 model = SignalPredictor1D(num_classes=len(ENH_LIST))
@@ -292,10 +156,9 @@ model.to(device)
 # Train the model
 import torch.optim as optim
 
-num_epochs = 5000
-lr = 1e-6  # Initial learning rate
-# lr = 1e-5  # Initial learning rate
-wd = 0 * 1e-6
+num_epochs = EPOCHS
+lr = LR  # Initial learning rate
+wd = WD  # Weight decay
 optimizer = optim.Adam(model.parameters(), weight_decay=wd, lr=lr)
 lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.8, patience=15, verbose=True, min_lr=1e-8)
 import torch.nn as nn
@@ -319,7 +182,8 @@ def train(model, optimizer, criterion, train_loader, val_loader, num_epochs=5000
             for seqs, y in train_loader:
                 seqs = seqs.float().to(device)
                 labels, classes = y
-                labels = torch.tensor(labels, dtype=torch.float32).to(device)
+                labels = labels.float().to(device)
+
 
                 optimizer.zero_grad()
 
@@ -387,9 +251,9 @@ def train(model, optimizer, criterion, train_loader, val_loader, num_epochs=5000
         model.load_state_dict(best_model_dict)
         print("Loaded the best model with validation loss:", best_val_loss)
 
-    return model, history
+    return model, history, epoch
 
-model, history = train(model, optimizer, criterion, train_loader, val_loader, num_epochs=num_epochs)
+model, history, epochs_trained = train(model, optimizer, criterion, train_loader, val_loader, num_epochs=num_epochs, patience=ES_patience)
 
 # Evaluate the model
 def test(model, test_loader):
@@ -416,23 +280,25 @@ def test(model, test_loader):
     print(f"Shapes: y_true: {y_true.shape}, y_pred: {y_pred.shape}, y_color: {y_color.shape}")
 
 
-    from sklearn.metrics import mean_squared_error, r2_score
     mse = mean_squared_error(y_true, y_pred)
     r2 = r2_score(y_true, y_pred)
-    pierce_corr = np.corrcoef(y_true, y_pred)[0, 1]
-    print(f"Test MSE: {mse:.4f}, R^2: {r2:.4f}, Pearson Correlation: {pierce_corr:.4f}")
+    pierson_corr = np.corrcoef(y_true, y_pred)[0, 1]
+    print(f"Test MSE: {mse:.4f}, R^2: {r2:.4f}, Pearson Correlation: {pierson_corr:.4f}")
 
-    return y_true, y_pred, y_color, mse, r2, pierce_corr
+    return y_true, y_pred, y_color, mse, r2, pierson_corr
 
 # Save the model
 
-y_true, y_pred, y_color, mse, r2, pierce_corr = test(model, test_loader)
+y_true, y_pred, y_color, mse, r2, pierson_corr = test(model, test_loader)
 
 plt.figure(figsize=(10, 6))
-plt.scatter(y_true, y_pred, alpha=0.5, c=y_color, cmap='jet', edgecolors='k', s=50)
+if len(ENH_LIST) == 1:
+    plt.scatter(y_true, y_pred, alpha=0.5, s=50, edgecolors='k')
+else:
+    plt.scatter(y_true, y_pred, alpha=0.5, c=y_color, cmap='jet', s=50, edgecolors='k')
 plt.plot([y_true.min(), y_true.max()], [y_true.min(), y_true.max()], 'r--', lw=2)
 plt.title('True vs Predicted Labels')
-plt.text(0.05, 1.01, f'Pearson Correlation: {pierce_corr:.4f}\nMSE: {mse:.4f}\nR^2: {r2:.4f}', transform=plt.gca().transAxes)
+plt.text(0.05, 1.01, f'Pearson Correlation: {pierson_corr:.4f}\nMSE: {mse:.4f}\nR^2: {r2:.4f}', transform=plt.gca().transAxes)
 plt.xlabel('True Labels')
 plt.ylabel('Predicted Labels')
 plt.grid()
@@ -456,30 +322,14 @@ print(f"Training and validation loss plot saved as {save_dir}/{enh_name}_tloss_o
 
 WT_SEQ = "TTATGGATCCTCGGTTCACGCAATGACCGCGGCTCCAGGGGCGAGAGGAGCCAGCCCTGTCTCTCTCTCCTGGCCCTGGGGGCGCCCGCCGCGAGGGCGGGGCCGGGATTGTGCTGATTCTGGCCTCCCTGGGCCGGAGGCTCTAGTGGAACTTAAGGCTCCTCCCTGATGGCACCGAGGCGAGGAACTGCCAGCTGTCTGTCTCCTTCCTGCCTTGACCCAGAGCAGTTGATCCGGTCCTGGATCCATAA"
 
-def one_hot_encode(seq):
-    seq = seq.upper()
-    encoding_dict = {
-        "A": [1, 0, 0, 0],
-        "C": [0, 1, 0, 0],
-        "G": [0, 0, 1, 0],
-        "T": [0, 0, 0, 1],
-        "N": [0, 0, 0, 0]
-    }
 
-    encoding = []
-    for i, char in enumerate(seq):
-        encoding.append(encoding_dict[char])
-
-    return np.array(encoding).T
-
-
-saturation_mut_data = [one_hot_encode(WT_SEQ)]  # Start with the wild-type sequence
+saturation_mut_data = [one_hot_encode(WT_SEQ).T]  # Start with the wild-type sequence
 for i in range(len(WT_SEQ)):
   for nuc in ["A", "C", "G", "T"]:
     if WT_SEQ[i] != nuc:
-        saturation_mut_data.append(one_hot_encode(WT_SEQ[:i] + nuc + WT_SEQ[i+1:]))
+        saturation_mut_data.append(one_hot_encode(WT_SEQ[:i] + nuc + WT_SEQ[i+1:]).T)
     else:
-        saturation_mut_data.append(one_hot_encode("G" + WT_SEQ[:i] + WT_SEQ[i+1:]))
+        saturation_mut_data.append(one_hot_encode("G" + WT_SEQ[:i] + WT_SEQ[i+1:]).T)
 
 saturation_mut_data = np.array(saturation_mut_data)
 
@@ -500,8 +350,8 @@ sat_mut = sat_mut[1:]  # Remove the wild-type sequence output
 
 sat_mut = sat_mut.reshape(len(WT_SEQ), 4).T - WT_value
 
-deletion_effects = sat_mut * one_hot_encode(WT_SEQ)
-sat_mut = sat_mut * (1 - one_hot_encode(WT_SEQ))  # Apply the deletion effects to the saturation mutation data
+deletion_effects = sat_mut * one_hot_encode(WT_SEQ).T
+sat_mut = sat_mut * (1 - one_hot_encode(WT_SEQ).T)  # Apply the deletion effects to the saturation mutation data
 
 
 import tangermeme.plot as tp
@@ -512,7 +362,7 @@ ax[0].set_xticks(np.arange(10)*25, np.arange(10)*25-25)
 tp.plot_logo(sat_mut, ax[0])
 ax[0].set_title(f"Saturation Mutation Logo for {enh_name} (Centered on WT)")
 ax[1].plot(np.arange(6)*50, np.arange(6)*0, color='red', linestyle='--', linewidth=1)
-ax[1].plot(np.sum(deletion_effects * one_hot_encode(WT_SEQ), axis=0), color='black', linewidth=2)
+ax[1].plot(np.sum(deletion_effects * one_hot_encode(WT_SEQ).T, axis=0), color='black', linewidth=2)
 ax[1].set_title(f"Deletion Effects for {enh_name}")
 ax[1].set_xlabel("Position")
 ax[1].set_ylabel("Deletion Effect")
@@ -527,6 +377,28 @@ ax[2].grid(True)
 ax[2].set_xticks(np.arange(10)*25, np.arange(10)*25-25)
 plt.savefig(f"{save_dir}/{enh_name}_saturation_mutation_logo.png", dpi=150)
 print(f"Saturation mutation logo saved as {save_dir}/{enh_name}_saturation_mutation_logo.png")
+
+
+# save model in ./pototype_multiclass_regression_models_{enh_name}.pt
+torch.save(model.state_dict(), f"{save_dir}/{enh_name}_trained_model.pt")
+print(f"Model saved as {save_dir}/{enh_name}_trained_model.pt")
+
+# save parameters in a csv file
+with open(f"{save_dir}/{enh_name}_params.txt", "w") as f:
+    f.write(f"Coverage: {COVERAGE}\n")
+    f.write(f"Learning Rate: {lr}\n")
+    f.write(f"Weight Decay: {wd}\n")
+    f.write(f"Max Epochs: {num_epochs}\n")
+    f.write(f"Early Stopping Patience: {ES_patience}\n")
+    f.write(f"Epochs Trained: {epochs_trained}\n")
+    f.write(f"Batch Size: {BATCH_SIZE}\n")
+    f.write(f"Jiggle: {JIGGLE}\n")
+    f.write(f"ENH List: {ENH_LIST}\n")
+    f.write(f"Pierson Correlation: {pierson_corr}\n")
+    f.write(f"Mean Squared Error: {mse}\n")
+    f.write(f"R^2 Score: {r2}\n")
+print(f"Parameters saved as {save_dir}/{enh_name}_params.txt")
+
 
 
 exit()
@@ -617,13 +489,13 @@ print("Training complete. Evaluating the new model...")
 # Evaluate the new model
 new_model.eval()
 
-y_true, y_pred, y_color, mse, r2, pierce_corr = test(new_model, test_loader)
+y_true, y_pred, y_color, mse, r2, pierson_corr = test(new_model, test_loader)
 
 plt.figure(figsize=(10, 6))
 plt.scatter(y_true, y_pred, alpha=0.5, c=y_color, cmap='jet', edgecolors='k', s=50)
 plt.plot([y_true.min(), y_true.max()], [y_true.min(), y_true.max()], 'r--', lw=2)
 plt.title('True vs Predicted Labels (New Model)')
-plt.text(0.05, 1.01, f'Pearson Correlation: {pierce_corr:.4f}\nMSE: {mse:.4f}\nR^2: {r2:.4f}', transform=plt.gca().transAxes)
+plt.text(0.05, 1.01, f'Pearson Correlation: {pierson_corr:.4f}\nMSE: {mse:.4f}\nR^2: {r2:.4f}', transform=plt.gca().transAxes)
 plt.xlabel('True Labels')
 plt.ylabel('Predicted Labels')
 plt.grid()

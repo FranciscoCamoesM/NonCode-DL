@@ -97,7 +97,7 @@ def count_dinucleotides(seq):
 
 
 # Load the data
-local_path = "Fasta_Pool5"
+local_path = "Fasta_Pool3"
 all_files = import_files(local_path)
 
 
@@ -111,6 +111,32 @@ enh_list = np.unique(enh_list)
 print(f"Number of enhancers: {len(enh_list)}")
 
 for enh in enh_list:
+    lengths = {"MM": 0, "NM": 0, "NP": 0, "PP": 0}
+    for file in all_files:
+        if file.file_enh != enh:
+            continue
+        if file.file_class not in lengths:
+            continue
+
+
+        lengths[file.file_class] = len(file)
+
+
+    lengths = {"MM": lengths["MM"], "M": lengths["NM"], "P": lengths["NP"], "PP": lengths["PP"]}
+
+
+    # plot lengths
+    plt.figure(figsize=(9, 7))
+    plt.bar(lengths.keys(), lengths.values())
+    plt.xlabel("Bin")
+    plt.ylabel("Number of Reads")
+    plt.title(f'Total Number of Reads per Bin in Dataset {enh}')
+    plt.savefig(os.path.join(SAVE_DIR, f"{enh}_lengths.png"))
+    plt.close()
+
+
+
+
     mutation_entries = {}
     for file in all_files:
         if file.file_enh != enh:
@@ -154,7 +180,7 @@ for enh in enh_list:
     plt.yscale("log")
     plt.xlabel("Number of reads for the same variant")
     plt.ylabel("Number of unique variants (log scale)")
-    plt.title(f'Number of Reads per Unique Variant in Clone {enh}')
+    plt.title(f'Number of Reads per Unique Variant in Dataset {enh}')
     plt.savefig(os.path.join(SAVE_DIR, f"{enh}_mutation_distribution.png"))
     plt.close()
 
@@ -182,7 +208,7 @@ for enh in enh_list:
     plt.bar(class_counts.keys(), class_counts.values())
     plt.xlabel("Class")
     plt.ylabel("Number of Unique Variants")
-    plt.title(f'Number of Unique Variants per Class in Clone {enh}')
+    plt.title(f'Number of Unique Variants per Class in Dataset {enh}')
     plt.savefig(os.path.join(SAVE_DIR, f"{enh}_class_distribution.png"))
     plt.close()
 
@@ -196,7 +222,7 @@ for enh in enh_list:
     plt.bar(bar_graph.keys(), bar_graph.values())
     plt.xlabel("Class")
     plt.ylabel("Percentage of Unique Variants (%)")
-    plt.title(f'Percentage of Unique Variants per Class in Clone {enh}')
+    plt.title(f'Percentage of Unique Variants per Class in Dataset {enh}')
     plt.savefig(os.path.join(SAVE_DIR, f"{enh}_class_distribution_perc.png"))
     plt.close()
 
@@ -224,62 +250,13 @@ for enh in enh_list:
     ax_nuc[0].axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
     ax_nuc[0].set_xlabel("Nucleotide")
     ax_nuc[0].set_ylabel("Percentage of Nucleotides")
-    ax_nuc[0].set_title(f'Percentage of Nucleotides in Clone {enh}')
+    ax_nuc[0].set_title(f'Percentage of Nucleotides in Dataset {enh}')
     ax_nuc[1].pie(dinucleotide_counts.values(), labels=dinucleotide_counts.keys(), autopct='%.1f%%')
     ax_nuc[1].axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle.
     ax_nuc[1].set_xlabel("Dinucleotide")
     ax_nuc[1].set_ylabel("Percentage of Dinucleotides")
-    ax_nuc[1].set_title(f'Percentage of Dinucleotides in Clone {enh}')
+    ax_nuc[1].set_title(f'Percentage of Dinucleotides in Dataset {enh}')
     fig_nuc.suptitle(f"Enhancer {enh} nucleotide distribution")
     plt.tight_layout()
     plt.savefig(os.path.join(SAVE_DIR, f"{enh}_nucleotide_distribution.png"))
     plt.close()
-
-
-
-    continue
-    # plot in %
-    bar_graph_perc = {}
-    total = sum(bar_graph.values())
-    for key in bar_graph:
-        bar_graph_perc[key] = bar_graph[key] / total * 100
-
-
-
-    # do both plots in the same figure
-    fig, ax = plt.subplots(1, 2, figsize=(15, 10))
-    ax[0].bar(bar_graph.keys(), bar_graph.values())
-    ax[0].set_xlabel("Number of mutations")
-    ax[0].set_ylabel("Number of enhancers (log scale)")
-    ax[0].set_title(f'Number of class entries per mutation in enhancer {enh}')
-    # ax[0].set_yscale("log")
-
-    ax[1].bar(bar_graph_perc.keys(), bar_graph_perc.values())
-    ax[1].set_xlabel("Number of mutations")
-    ax[1].set_ylabel("Percentage of enhancers")
-    ax[1].set_title(f"Percentage of class entries per mutation")
-
-    fig.suptitle(f"Enhancer {enh} mutation distribution")
-
-    # plt.show()
-    plt.close(fig)
-
-
-
-
-
-    #analise mutation distribution
-    
-    # load wt
-    wt_enh = load_wt(enh)
-
-
-    count_mutations(wt_enh, list(mutation_entries.keys())[0])
-
-    mutation_distribution(wt_enh, list(mutation_entries.keys()), enh)
-
-
-
-
-        
-        

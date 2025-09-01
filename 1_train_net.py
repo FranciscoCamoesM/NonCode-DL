@@ -20,7 +20,7 @@ parser = argparse.ArgumentParser(description='Train a neural network to predict 
 parser.add_argument('--enh', type=str, default='E25E10', help='Enhancer name to train on')
 parser.add_argument('--label', type=str, default='mm_v_all', help='Label title to train on')
 parser.add_argument('--subset', type=float, default=1.0, help='Fraction of the data to use')
-parser.add_argument('--bs', type=int, default=64, help='Batch size for training')
+parser.add_argument('--bs', type=int, default=256, help='Batch size for training')
 parser.add_argument('--lr', type=float, default=0.0005, help='Learning rate for training')
 parser.add_argument('--epochs', type=int, default=20, help='Number of epochs to train for')
 parser.add_argument('--wd', type=float, default=1e-5, help='Weight decay for the optimizer')
@@ -115,27 +115,6 @@ for i, (data, target) in enumerate(train_loader):
     print(target.shape)
     break
 
-
-
-# def count(dl):
-#     memory = []
-#     for i, (data, target) in enumerate(dl):
-#         if N_CLASSES <= 2:
-#             targets = target.numpy()[:, 0] > 0.5
-#         else:
-#             np.argmax(target.numpy(), axis=1)
-
-#         memory.extend(targets)
-1
-#         if i > 10:
-#             break
-
-#     #count
-#     from collections import Counter
-#     print(Counter(memory))
-
-# count(train_loader)
-# count(test_loader)
 
 
 

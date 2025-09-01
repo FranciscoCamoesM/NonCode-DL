@@ -214,3 +214,125 @@ class SignalPredictor_Abstract(nn.Module):
         selected = torch.stack([x[i, head] for i, head in enumerate(input_heads)]).unsqueeze(1)
         
         return selected
+    
+
+class ComplexModel(torch.nn.Module):    # this model was meant to be used in regression tasks, but we ended up using the SignalPredictor1D model instead.
+    def __init__(self, num_classes=1):
+        super(ComplexModel, self).__init__()
+        self.conv1 = nn.Conv1d(4, 128, kernel_size=7, padding=3)
+        self.relu1 = nn.ReLU()
+        self.conv2 = nn.Conv1d(128, 128, kernel_size=7, padding=3)
+        self.relu2 = nn.ReLU()
+        self.pool1 = nn.MaxPool1d(2)
+
+        self.conv3 = nn.Conv1d(128, 128, kernel_size=7, padding=3)
+        self.relu3 = nn.ReLU()
+        self.conv4 = nn.Conv1d(128, 128, kernel_size=7, padding=3)
+        self.relu4 = nn.ReLU()
+        self.pool2 = nn.MaxPool1d(2)
+
+        self.conv5 = nn.Conv1d(128, 128*2, kernel_size=15, padding=0)
+        self.relu5 = nn.ReLU()
+        self.dropout1 = nn.Dropout(0.1)
+        self.conv6 = nn.Conv1d(128*2, 128*4, kernel_size=25, padding=0)
+        self.relu6 = nn.ReLU()
+        self.dropout2 = nn.Dropout(0.1)
+        self.pool3 = nn.MaxPool1d(2)
+
+        # self.conv7 = nn.Conv1d(128 * 4, 128 * 8, kernel_size=5, padding=1)
+        # self.bn7 = nn.BatchNorm1d(128 * 8)
+        # self.relu7 = nn.ReLU()
+        # self.conv8 = nn.Conv1d(128 * 8, 128 * 8, kernel_size=5, padding=1)
+        # self.bn8 = nn.BatchNorm1d(128 * 8)
+        # self.relu8 = nn.ReLU()
+        # self.pool4 = nn.MaxPool1d(2)
+
+        self.fc1 = nn.Linear(128 * 24 * 2, 128*4)
+        self.relufc1 = nn.ReLU()
+        self.fc2 = nn.Linear(128*4, 128)
+        self.relufc2 = nn.ReLU()
+        self.fc3 = nn.Linear(128, num_classes)
+
+        # self.normalization = nn.Linear(1, num_classes)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.relu1(x)
+        x = self.conv2(x)
+        x = self.relu2(x)
+        x = self.pool1(x)
+
+        x = self.conv3(x)
+        x = self.relu3(x)
+        x = self.conv4(x)
+        x = self.relu4(x)
+        x = self.pool2(x)
+
+        x = self.conv5(x)
+        x = self.relu5(x)
+        x = self.dropout1(x)
+        x = self.conv6(x)
+        x = self.relu6(x)
+        x = self.dropout2(x)
+        x = self.pool3(x)
+
+        # x = self.conv7(x)
+        # x = self.bn7(x)
+        # x = self.relu7(x)
+        # x = self.conv8(x)
+        # x = self.bn8(x)
+        # x = self.relu8(x)
+        # x = self.pool4(x)
+
+        # print(f"Shape after conv layers: {x.shape}")
+
+        x = x.view(-1, 128 * 24 * 2)
+        x = self.fc1(x)
+        x = self.relufc1(x)
+        x = self.fc2(x)
+        x = self.relufc2(x)
+        x = self.fc3(x)
+        # x = self.normalization(x)
+
+        return x
+    
+    def abstract(self, x):
+        x = self.conv1(x)
+        x = self.relu1(x)
+        x = self.conv2(x)
+        x = self.relu2(x)
+        x = self.pool1(x)
+
+        x = self.conv3(x)
+        x = self.relu3(x)
+        x = self.conv4(x)
+        x = self.relu4(x)
+        x = self.pool2(x)
+
+        x = self.conv5(x)
+        x = self.relu5(x)
+        x = self.dropout1(x)
+        x = self.conv6(x)
+        x = self.relu6(x)
+        x = self.dropout2(x)
+        x = self.pool3(x)
+
+        # x = self.conv7(x)
+        # x = self.bn7(x)
+        # x = self.relu7(x)
+        # x = self.conv8(x)
+        # x = self.bn8(x)
+        # x = self.relu8(x)
+        # x = self.pool4(x)
+
+        # print(f"Shape after conv layers: {x.shape}")
+
+        x = x.view(-1, 128 * 24 * 2)
+        x = self.fc1(x)
+        x = self.relufc1(x)
+        x = self.fc2(x)
+        x = self.relufc2(x)
+        x = self.fc3(x)
+        x = torch.mean(x, dim=1, keepdim=True)  # Average over the batch dimension
+
+        return x

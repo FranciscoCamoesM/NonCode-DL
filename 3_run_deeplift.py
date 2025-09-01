@@ -16,14 +16,17 @@ import argparse
 parser = argparse.ArgumentParser(description='Train a model to predict enhancer activity')
 
 parser.add_argument('--id', type=int, default=None, help='Batch size for training')
-parser.add_argument('--datafolder', type=str, default="Fasta_Pool2", help='Folder with the data')
 parser.add_argument('--device', type=str, default="cuda", help='Device to use for training (cpu or cuda)')
+parser.add_argument('--o', '--output_dir', type=str, default="explicability_figs", help='Directory to save the output figures')
+parser.add_argument('--save_dir', type=str, default="saved_models", help='Directory to save the model')
+parser.add_argument('--n_refs', type=int, default=100, help='Number of references to use for DeepLift SHAP')
 
 args = parser.parse_args()
 
-SAVE_DIR = 'saved_models'
-N_REFS = 200
+SAVE_DIR = args.save_dir
+N_REFS = args.n_refs
 model_id = args.id
+output_dir = args.o
 
 if model_id is None:
     model_id = input("Enter the model id: ")
@@ -126,39 +129,56 @@ enhancer = torch.tensor(enhancer, dtype=torch.float32).unsqueeze(0).permute(0, 2
 
 # load training data
 dataloc = get_dataloc(ENHANCER_NAME)
-dataset = get_seq_label_pairs(enh_name = ENHANCER_NAME, local_path = dataloc)
-X = list(dataset.keys())
-y = list(dataset.values())
+X = []
+y = []
+for i in range(-5, 6):
+    if ENHANCER_NAME != "E25E10R3":
+        dataset = get_seq_label_pairs(enh_name = ENHANCER_NAME, local_path = dataloc, jiggle=i)
+    else:
+        dataset = get_coverage_seq_label_pairs(enh_name = ENHANCER_NAME, local_path = dataloc, jiggle=i, coverage=10)
+    X.extend(list(dataset.keys()))
+    y.extend(list(dataset.values()))
+    print(f"Loaded {len(X)} samples from {ENHANCER_NAME} with jiggle {i}")
 dataset = EnhancerDataset(X, y, LABELS)
-dataloader = torch.utils.data.DataLoader(dataset, batch_size=N_REFS, shuffle=True, num_workers=4)
+print(f"Dataset_object created with {len(dataset)} samples")
+dataloader = torch.utils.data.DataLoader(dataset, batch_size=min(N_REFS, 256), shuffle=True, num_workers=4)
 
+print(f"References loaded")
+
+references = []
 for x, y in dataloader:
-    references = x.float()
-    print(f"References shape: {references.shape}")
-    break
+    references.extend(x.float().detach().cpu().numpy().tolist())
+    print(f"References shape: {len(references)}")
+    if len(references) >= N_REFS:
+        references = references[:N_REFS]
+        references = torch.tensor(references, dtype=torch.float32)
+        break
+
 
 references = references.unsqueeze(0)
 references = references.repeat(enhancer.shape[0], 1, 1, 1)
 
-print(f"References shape: {references.shape}", "**"*50)
 
+
+print(f"Input shape: {enhancer.shape}, Reference shape: {references.shape}")
 
 
 # get the deep lift shap values
 # from tangermeme.utils import characters
-# for seq in references:
+# for seq in references[0]:
 #     print(characters(seq))
-# reference_shap_values = deep_lift_shap(model, enhancer, hypothetical=True, references=references, device=device)
-reference_shap_values = deep_lift_shap(model, enhancer, hypothetical=True, n_shuffles =N_REFS, device=device)
+reference_shap_values = deep_lift_shap(model, enhancer, hypothetical=True, references=references, device=device)
+# reference_shap_values = deep_lift_shap(model, enhancer, hypothetical=True, n_shuffles =N_REFS, device=device)
+
 
 
 fig, ax = plt.subplots(2, 1, figsize=(len(reference_shap_values[0][0])//15, 6))
 plot_logo(reference_shap_values[0].cpu().detach().numpy(), ax=ax[0])
 plot_logo(reference_shap_values[0].cpu().detach().numpy() * enhancer[0].cpu().detach().numpy(), ax=ax[1])
-xticks = np.arange(0, len(y), step=25)
+xticks = np.arange(0, reference_shap_values.shape[2], step=25)
 ax[0].set_xticks(xticks, xticks - 25)
 ax[1].set_xticks(xticks, xticks - 25)
-plt.savefig(f"explicability_figs/{ENHANCER_NAME}_{model_id}_shap.png")
+plt.savefig(f"{output_dir}/{ENHANCER_NAME}_{model_id}_deeplift_shap.png")
 plt.close()
 
 
@@ -200,8 +220,14 @@ ax[2].fill_between([250 - pads[1], 250], min(att_energy), max(att_energy), color
 ax[2].set_xlabel("Position")
 
 
-plt.savefig(f"explicability_figs/{ENHANCER_NAME}_{model_id}_heatmap.png")
+plt.savefig(f"{output_dir}/{ENHANCER_NAME}_{model_id}_deeplift_heatmap.png")
 # plt.show()
 plt.close()
+
+print(f"Saved figures to {output_dir}/{ENHANCER_NAME}_{model_id}_deeplift_shap.png and {output_dir}/{ENHANCER_NAME}_{model_id}_deeplift_heatmap.png")
+
+# save the shap values to a numpy file
+np.save(f"{output_dir}/{ENHANCER_NAME}_{model_id}_deeplift_shap.npy", reference_shap_values[0].cpu().detach().numpy())
+print(f"Saved SHAP values to {output_dir}/{ENHANCER_NAME}_{model_id}_deeplift_shap.npy")
 
 print("All done!")

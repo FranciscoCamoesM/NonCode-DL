@@ -354,80 +354,11 @@ plt.savefig(f"{images_save_dir}/{enh_name}_tloss_over_epochs.png", dpi=150)
 print(f"Training and validation loss plot saved as {images_save_dir}/{enh_name}_tloss_over_epochs.png")
 
 
+from interpolate_sat_mut import saturation_mutagenesis
 
-WT_SEQ = "TTATGGATCCTCGGTTCACGCAATGACCGCGGCTCCAGGGGCGAGAGGAGCCAGCCCTGTCTCTCTCTCCTGGCCCTGGGGGCGCCCGCCGCGAGGGCGGGGCCGGGATTGTGCTGATTCTGGCCTCCCTGGGCCGGAGGCTCTAGTGGAACTTAAGGCTCCTCCCTGATGGCACCGAGGCGAGGAACTGCCAGCTGTCTGTCTCCTTCCTGCCTTGACCCAGAGCAGTTGATCCGGTCCTGGATCCATAA"
+# Run saturation mutagenesis
+saturation_mutagenesis(model, enh_name, device, images_save_dir, BATCH_SIZE=BATCH_SIZE)
 
-def one_hot_encode(seq):
-    seq = seq.upper()
-    encoding_dict = {
-        "A": [1, 0, 0, 0],
-        "C": [0, 1, 0, 0],
-        "G": [0, 0, 1, 0],
-        "T": [0, 0, 0, 1],
-        "N": [0, 0, 0, 0]
-    }
-
-    encoding = []
-    for i, char in enumerate(seq):
-        encoding.append(encoding_dict[char])
-
-    return np.array(encoding).T
-
-
-saturation_mut_data = [one_hot_encode(WT_SEQ)]  # Start with the wild-type sequence
-for i in range(len(WT_SEQ)):
-  for nuc in ["A", "C", "G", "T"]:
-    if WT_SEQ[i] != nuc:
-        saturation_mut_data.append(one_hot_encode(WT_SEQ[:i] + nuc + WT_SEQ[i+1:]))
-    else:
-        saturation_mut_data.append(one_hot_encode("G" + WT_SEQ[:i] + WT_SEQ[i+1:]))
-
-saturation_mut_data = np.array(saturation_mut_data)
-
-data_loader = torch.utils.data.DataLoader(dataset=saturation_mut_data,
-                                             batch_size=BATCH_SIZE,
-                                             shuffle=False)
-
-sat_mut = []
-for images in data_loader:
-  images = images.to(device).float()
-  output = model(images)
-  sat_mut.extend(output.cpu().detach().numpy())
-
-sat_mut = np.array(sat_mut)
-
-WT_value= sat_mut[0]
-sat_mut = sat_mut[1:]  # Remove the wild-type sequence output
-
-sat_mut = sat_mut.reshape(len(WT_SEQ), 4).T - WT_value
-
-deletion_effects = sat_mut * one_hot_encode(WT_SEQ)
-sat_mut = sat_mut * (1 - one_hot_encode(WT_SEQ))  # Apply the deletion effects to the saturation mutation data
-
-
-import tangermeme.plot as tp
-
-
-fig, ax = plt.subplots(3, 1, figsize=(18, 15))
-ax[0].set_xticks(np.arange(10)*25, np.arange(10)*25-25)
-tp.plot_logo(sat_mut, ax[0])
-ax[0].set_title(f"Saturation Mutation Logo for {enh_name} (Centered on WT)")
-ax[1].plot(np.arange(6)*50, np.arange(6)*0, color='red', linestyle='--', linewidth=1)
-ax[1].plot(np.sum(deletion_effects * one_hot_encode(WT_SEQ), axis=0), color='black', linewidth=2)
-ax[1].set_title(f"Deletion Effects for {enh_name}")
-ax[1].set_xlabel("Position")
-ax[1].set_ylabel("Deletion Effect")
-ax[1].grid(True)
-ax[1].set_xticks(np.arange(10)*25, np.arange(10)*25-25)
-ax[1].set_xlim(0, 250)
-tp.plot_logo(deletion_effects, ax[2])
-ax[2].set_title(f"Deletion Effects for {enh_name}")
-ax[2].set_xlabel("Position")
-ax[2].set_ylabel("Deletion Effect")
-ax[2].grid(True)
-ax[2].set_xticks(np.arange(10)*25, np.arange(10)*25-25)
-plt.savefig(f"{images_save_dir}/{enh_name}_saturation_mutation_logo.png", dpi=150)
-print(f"Saturation mutation logo saved as {images_save_dir}/{enh_name}_saturation_mutation_logo.png")
-
-
-
+from interpolate_deeplift import interpol_deep_lift
+# Run DeepLIFT
+interpol_deep_lift(model, enh_name, device, images_save_dir, BATCH_SIZE=BATCH_SIZE)

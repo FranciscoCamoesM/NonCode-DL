@@ -17,9 +17,6 @@ import argparse
 parser = argparse.ArgumentParser(description='Train a model to predict enhancer activity')
 
 parser.add_argument('--id', type=int, default=None, help='Batch size for training')
-parser.add_argument('--w', type=int, default=3, help='Sie of the window to use for windowed mutagenesis. With 8 takes around 2 hours, with 7 around 30 minutes, and with 5 around 2 minutes.')
-parser.add_argument('--n_top', type=int, default=250, help='Number of top and bottom kmers to save')
-parser.add_argument('--max_n_delete', type=int, default=15, help='Maximum number of deletions to do')
 parser.add_argument('--save_dir', type=str, default='saved_models', help='Directory where the model is saved')
 parser.add_argument('--enh', type=str, default=None, help='Enhancer name to train on')
 parser.add_argument('--label', type=str, default=None, help='Label title to train on')
@@ -29,8 +26,6 @@ args = parser.parse_args()
 
 SAVE_DIR = args.save_dir
 model_id = args.id
-n_top = args.n_top
-max_n_delete = args.max_n_delete + 1
 images_save_dir = args.o
 
 os.makedirs(images_save_dir, exist_ok=True)
@@ -139,20 +134,25 @@ with open(f"original_enhancers.txt", "r") as f:
     WT_SEQ = enhancers[enhancers.index(f">{ENHANCER_NAME}\n") + 1].strip()
 
 
-WT_SEQ = simple_pad(WT_SEQ, 250)
+WT_SEQ = simple_pad(WT_SEQ, max_length=252)
 WT_SEQ = WT_SEQ.upper()
 
-print(f"Using wild-type sequence: {WT_SEQ}.")
+print(f"Using wild-type sequence: {WT_SEQ[1:-1]}.")
 
-saturation_mut_data = [one_hot_encode(WT_SEQ).T]  # Start with the wild-type sequence
-for i in range(len(WT_SEQ)):
-  for nuc in ["A", "C", "G", "T"]:
-    if WT_SEQ[i] != nuc:
-        saturation_mut_data.append(one_hot_encode(WT_SEQ[:i] + nuc + WT_SEQ[i+1:]).T)
-    else:
-        saturation_mut_data.append(one_hot_encode("G" + WT_SEQ[:i] + WT_SEQ[i+1:]).T)
+saturation_mut_data = [one_hot_encode(WT_SEQ[1:-1]).T]  # Start with the wild-type sequence
+for i in range(len(WT_SEQ)-1):
+    if i ==0:
+        continue  # Skip the first position, as it is not a mutation site
+    for nuc in ["A", "C", "G", "T"]:
+        if WT_SEQ[i] != nuc:
+            saturation_mut_data.append(one_hot_encode(WT_SEQ[1:i] + nuc + WT_SEQ[i+1:-1]).T)
+        else:
+            saturation_mut_data.append(one_hot_encode(WT_SEQ[:i] + WT_SEQ[i+1:-1]).T)
+
+    saturation_mut_data.append(one_hot_encode(WT_SEQ[1:i] + WT_SEQ[i+1:]).T)
 
 saturation_mut_data = np.array(saturation_mut_data)
+
 
 data_loader = torch.utils.data.DataLoader(dataset=saturation_mut_data,
                                              batch_size=BATCH_SIZE,
@@ -169,9 +169,13 @@ sat_mut = np.array(sat_mut)
 WT_value= sat_mut[0]
 sat_mut = sat_mut[1:]  # Remove the wild-type sequence output
 
-sat_mut = sat_mut.reshape(len(WT_SEQ), 4).T - WT_value
+WT_SEQ = WT_SEQ[1:-1]  # Remove the padding characters
 
-deletion_effects = sat_mut * one_hot_encode(WT_SEQ).T
+sat_mut = sat_mut.reshape(len(WT_SEQ), 5).T - WT_value
+
+deletion_effect_right = sat_mut[4]
+sat_mut = sat_mut[:4]  # Keep only the first four rows (A, C, G, T)
+deletion_effects = (sat_mut * one_hot_encode(WT_SEQ).T + deletion_effect_right * one_hot_encode(WT_SEQ).T) / 2
 sat_mut = sat_mut * (1 - one_hot_encode(WT_SEQ).T)  # Apply the deletion effects to the saturation mutation data
 
 
@@ -198,3 +202,7 @@ ax[2].grid(True)
 ax[2].set_xticks(np.arange(10)*25, np.arange(10)*25-25)
 plt.savefig(f"{images_save_dir}/{ENHANCER_NAME}_{model_id}_saturation_mutation_logo.png", dpi=150)
 print(f"Saturation mutation logo saved as {images_save_dir}/{ENHANCER_NAME}_{model_id}_saturation_mutation_logo.png")
+
+
+# save the saturation mutation data to a file
+np.save(f"{images_save_dir}/{ENHANCER_NAME}_{model_id}_saturation_mutation.npy", sat_mut + deletion_effects)

@@ -131,6 +131,9 @@ def one_hot_encode(seq):
 
     encoding = []
     for i, char in enumerate(seq):
+        if char not in encoding_dict:
+            print(f"Warning: Character '{char}' at position {i} not recognized. Using 'N' as default.")
+            encoding.append(encoding_dict["N"])
         encoding.append(encoding_dict[char])
 
     return np.array(encoding)
@@ -176,7 +179,7 @@ def simple_pad_batch(batch, PADDING = True, jiggle = 0):
 
     return sequences
 
-def simple_pad(seq, PADDING = True, jiggle = 0, pre_and_post_padding = None):
+def simple_pad(seq, PADDING = True, jiggle = 0, pre_and_post_padding = None, max_length=250):
     if pre_and_post_padding is None:
         if os.path.exists("padding_seq.txt") and PADDING:
             with open("padding_seq.txt", "r") as f:
@@ -196,9 +199,9 @@ def simple_pad(seq, PADDING = True, jiggle = 0, pre_and_post_padding = None):
     
     pre_line = pre_line.strip()
     post_line = post_line.strip()
-
+    seq = seq.strip()
+    
     seq = pre_line + seq + post_line
-    max_length = 250
     cutting_points = [len(seq)//2 - max_length//2, len(seq)//2 + max_length//2]
     cutting_points[0] += jiggle
     cutting_points[1] += jiggle
@@ -497,8 +500,52 @@ def load_trained_model(model_id, folder, model, device="cpu", **kwargs):
 
     model_name = model_name.split(".")[0]  # remove the .pt, to use the name for the other files
     print(f"Using model {model_name}")
+
+    model_loading_loc = os.path.join(folder, f"{model_name}.pt")
+
+    print(f"Loading model {model_name} from {model_loading_loc}")
     
-    model.load_state_dict(torch.load(f"{folder}/{model_name}.pt", map_location=device))
+    model.load_state_dict(torch.load(f"{model_loading_loc}", map_location=device, weights_only=True))
     return model
 
     
+def read_binned_cell_data(enh_name, bin_cell_data = "binned_cell_data.tsv"):
+    # load bin cell data
+    # structure is:
+    # enhancer_name, MM cells, NM cells, NP cells, PP cells, chromosome
+    bin_cells = {}
+    with open(bin_cell_data, "r") as f:
+        header = f.readline().strip().split("\t")
+        for line in f:
+            line = line.strip().split("\t")
+            if line[0] == enh_name:
+                bin_cells = {header[i]: int(line[i]) for i in range(1, len(header) - 1)}
+                break
+    return bin_cells
+
+def get_enh_coords(enh_name, bin_cell_data = "binned_cell_data.tsv"):
+    # find location of enhancer in bin cell data
+    bin_cells = read_binned_cell_data(enh_name, bin_cell_data)
+    if len(bin_cells) == 0:
+        raise ValueError(f"No bin cells found for enhancer {enh_name} in file {bin_cell_data}.")
+    
+    return bin_cells["location"] if "location" in bin_cells else None
+
+
+def get_bin_cells(enh_name, bin_cell_data = "binned_cell_data.tsv"):
+    bin_cells = read_binned_cell_data(enh_name, bin_cell_data)
+    if len(bin_cells) == 0:
+        raise ValueError(f"No bin cells found for enhancer {enh_name} in file {bin_cell_data}.")
+    
+    return np.array([bin_cells["MM"], bin_cells["NM"], bin_cells["NP"], bin_cells["PP"]])
+
+
+def center_and_cossim(seq1, seq2):
+    # center sequences
+    seq1 = seq1 - np.mean(seq1, axis=0)
+    seq2 = seq2 - np.mean(seq2, axis=0)
+
+    # calculate cosine similarity
+    cos_sim = np.dot(seq1.flatten(), seq2.flatten()) / (np.linalg.norm(seq1.flatten()) * np.linalg.norm(seq2.flatten()))
+    
+    return cos_sim
