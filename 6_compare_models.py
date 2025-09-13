@@ -54,20 +54,6 @@ class ModelInfo():
 
 PADDING = True
 
-# if False:
-#     temp = model_ref
-#     model_ref = model_test
-#     model_test = temp
-
-# models = [162929, 161039, 171106] #20
-# models = [135230, 145614, 162929, 131953, 105959, 105933, 104814] #ANK
-# models = [104335, 152018, 175800]
-# models = [191162606, 188140837, 187141747, 189003822, 187134752, 191164107, 188150341] # ank
-# models = [205105342, 205122355, 191212610, 188144325] # chr20:43021876-43022076
-# models = [181190907, 193164951, 188160740] # chr11:17429230-17429430
-# models = [192153143, 188213332] #chr11:2858382-2858582
-# models = [188155822, 188031228] # chr7:127258124-127258324
-
 
 
 models = [205132638, 194102032] # chr7:127258124-127258324
@@ -93,7 +79,6 @@ if not os.path.exists(savedir):
 
           
 SAVED_MODELS_DIR = "saved_models_final"
-# models = [192181302, 188161056, 184184329, 182155644, 181183315, 188151016] ##### falta o E22P1A3!!!!!!
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 

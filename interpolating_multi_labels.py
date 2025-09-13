@@ -16,7 +16,7 @@ parser.add_argument('--wd', type=float, default=1e-6, help='Weight decay')
 parser.add_argument('--lr', type=float, default=1e-5, help='Learning rate')
 parser.add_argument('--epochs', type=int, default=10000, help='Number of epochs')
 parser.add_argument('--batch_size', type=int, default=256, help='Batch size')
-parser.add_argument('--jiggle', type=int, default=5, help='Jiggle value')
+parser.add_argument('--jitter', type=int, default=5, help='Jitter value')
 parser.add_argument('--es_patience', type=int, default=200, help='Early stopping patience')
 
 args = parser.parse_args()
@@ -28,7 +28,7 @@ WD = args.wd
 LR = args.lr
 EPOCHS = args.epochs
 BATCH_SIZE = args.batch_size
-JIGGLE = args.jiggle
+JITTER = args.jitter
 ES_patience = args.es_patience
 
 
@@ -88,16 +88,16 @@ def get_gc_content(sequence):
     return (gc_count / len(sequence)) * 100 if len(sequence) > 0 else -0
 
 
-def pad_with_jiggles(seqs, jiggle_lim):
+def pad_with_jitters(seqs, jitter_lim):
     padded_seqs = []
-    for j in range(-jiggle_lim, jiggle_lim + 1):
-        padded_seqs.extend(simple_pad_batch(seqs, jiggle=j))
+    for j in range(-jitter_lim, jitter_lim + 1):
+        padded_seqs.extend(simple_pad_batch(seqs, jitter=j))
     return padded_seqs
 
-def pad_dataset(d, jiggle_lim):
+def pad_dataset(d, jitter_lim):
     seqs, values = list(zip(*d))
-    padded_seqs = pad_with_jiggles(seqs, jiggle_lim)
-    padded_values = values * (2 * jiggle_lim + 1)
+    padded_seqs = pad_with_jitters(seqs, jitter_lim)
+    padded_values = values * (2 * jitter_lim + 1)
     padded_seqs = [one_hot_encode(seq) for seq in padded_seqs]
     return list(zip(padded_seqs, padded_values))
 
@@ -126,13 +126,13 @@ train_seqs, val_seqs = train_test_split(train_seqs, test_size=0.2, random_state=
 print(f"Training sequences: {len(train_seqs)}, Validation sequences: {len(val_seqs)}, Test sequences: {len(test_seqs)}")
 
 # Create DataLoader for training, validation, and test sets
-train_seqs = pad_dataset(train_seqs, JIGGLE)
+train_seqs = pad_dataset(train_seqs, JITTER)
 train_dataset = CustomDataset(train_seqs)
 train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
-val_seqs = pad_dataset(val_seqs, JIGGLE)
+val_seqs = pad_dataset(val_seqs, JITTER)
 val_dataset = CustomDataset(val_seqs)
 val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
-test_seqs = pad_dataset(test_seqs, JIGGLE)
+test_seqs = pad_dataset(test_seqs, JITTER)
 test_dataset = CustomDataset(test_seqs)
 test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
@@ -392,7 +392,7 @@ with open(f"{save_dir}/{enh_name}_params.txt", "w") as f:
     f.write(f"Early Stopping Patience: {ES_patience}\n")
     f.write(f"Epochs Trained: {epochs_trained}\n")
     f.write(f"Batch Size: {BATCH_SIZE}\n")
-    f.write(f"Jiggle: {JIGGLE}\n")
+    f.write(f"Jitter: {JITTER}\n")
     f.write(f"ENH List: {ENH_LIST}\n")
     f.write(f"Pierson Correlation: {pierson_corr}\n")
     f.write(f"Mean Squared Error: {mse}\n")

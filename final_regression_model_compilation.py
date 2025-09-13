@@ -21,15 +21,15 @@ for enh_folder in tqdm(os.listdir(folder)):
 
                 file_path = os.path.join(folder, enh_folder, model, file)
                 coverage = -1
-                jiggle = -1
+                jitter = -1
                 for line in open(file_path):
                     if "ENH List" in line:
                         coverage = int(line.split(":")[1].split(",")[0].split("[")[2].strip())
                         # print(f"Coverage: {coverage}")
 
-                    if "Jiggle" in line:
-                        jiggle = int(line.split(":")[1].strip())
-                        # print(f"Jiggle: {jiggle}")
+                    if "Jitter" in line:
+                        jitter = int(line.split(":")[1].strip())
+                        # print(f"Jitter: {jitter}")
 
                     if line.startswith("Pierson Correlation"):
                         Pearson_corr = float(line.split(":")[1].strip())
@@ -70,7 +70,7 @@ for enh_folder in tqdm(os.listdir(folder)):
                     "ID": ID,
                     "ENH": ENH,
                     "Coverage": coverage,
-                    "Jiggle": jiggle,
+                    "Jitter": jitter,
                     "Weight Decay": weight_decay,
                     "Learning Rate": learning_rate,
                     "Epochs": epochs,
@@ -116,7 +116,7 @@ df = df[~((df["ENH"] == "E22P3B3R3") & (df["Coverage"] == 25))]
 # best_models = df.loc[df.groupby("ENH")["Validation Pearson Correlation"].idxmax()]
 # best_models = df.loc[df.groupby("ENH")["Validation Mean Squared Error"].idxmax()]
 best_models = df.copy()
-best_models = best_models.drop(columns=["Jiggle", "Epochs", "Weight Decay", "Learning Rate"])
+best_models = best_models.drop(columns=["Jitter", "Epochs", "Weight Decay", "Learning Rate"])
 
 # set negatives to 0 in Pearson and r^2
 # best_models["Validation Pearson Correlation"] = best_models["Validation Pearson Correlation"].clip(lower=0)

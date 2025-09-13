@@ -31,7 +31,7 @@ parser.add_argument('--optuna', type=bool, default=False, help='Whether to use o
 parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
 parser.add_argument('--pad', type=bool, default=True, help='Whether to pad the sequences with cassette or leave it with Ns')
 parser.add_argument('--coverage', type=int, default=1, help='Coverage for the enhancer')
-parser.add_argument('--jiggle', type=int, default=None, help='Jiggle the sequences by this many bases to both sides')
+parser.add_argument('--jitter', type=int, default=None, help='Jitter the sequences by this many bases to both sides')
 args = parser.parse_args()
 
 PADDING = args.pad
@@ -47,7 +47,7 @@ OPTIM = args.optim
 BEST_VAL = args.best_val
 DATA_FOLDER = get_dataloc(ENHANCER_NAME)
 COVERAGE = args.coverage
-JIGGLE = args.jiggle
+JITTER = args.jitter
 SEED = args.seed
 
 SAVE_DIR = 'saved_models_final'
@@ -88,14 +88,14 @@ if SUBSET < 1.0:
 
 
 # Create a data loader
-if JIGGLE is None:
+if JITTER is None:
     train_dataset = EnhancerDataset(X_train, y_train, LABELS, PADDING = PADDING)
     val_dataset = EnhancerDataset(X_val, y_val, LABELS, PADDING = PADDING)
     test_dataset = EnhancerDataset(X_test, y_test, LABELS, PADDING = PADDING)
 else:
-    train_dataset = EnhancerDataset(X_train, y_train, LABELS, PADDING = PADDING, jiggle_range=JIGGLE)
-    val_dataset = EnhancerDataset(X_val, y_val, LABELS, PADDING = PADDING, jiggle_range=JIGGLE)
-    test_dataset = EnhancerDataset(X_test, y_test, LABELS, PADDING = PADDING, jiggle_range=JIGGLE)
+    train_dataset = EnhancerDataset(X_train, y_train, LABELS, PADDING = PADDING, jitter_range=JITTER)
+    val_dataset = EnhancerDataset(X_val, y_val, LABELS, PADDING = PADDING, jitter_range=JITTER)
+    test_dataset = EnhancerDataset(X_test, y_test, LABELS, PADDING = PADDING, jitter_range=JITTER)
 
 train_weights = gen_sampler_weights(train_dataset, N_CLASSES)
 val_weights = gen_sampler_weights(val_dataset, N_CLASSES)
@@ -263,8 +263,8 @@ if not args.optuna:
             f.write(f"Momentum: {MOM}\n")
         f.write(f"Optimizer: {OPTIM}\n")
         f.write(f"Coverage: {COVERAGE}\n")
-        if JIGGLE is not None:
-            f.write(f"Jiggle: {JIGGLE}\n")
+        if JITTER is not None:
+            f.write(f"Jitter: {JITTER}\n")
 
         # record the metrics
         f.write(f"Confusion Matrix: {cm.tolist()}\n")

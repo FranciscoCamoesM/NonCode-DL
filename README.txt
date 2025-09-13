@@ -1,0 +1,1 @@
+1_train_net.py - Script to train a classification network. Handles data loading, model training, and evaluation.

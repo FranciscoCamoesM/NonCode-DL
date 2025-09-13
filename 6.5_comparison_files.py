@@ -4,7 +4,6 @@ import seaborn as sns
 import os
 
 
-savedir = "model_comparison/testeeee_"
 savedir = "model_comparison/chr8:41511631-41511831"
 
 pearson_corr = {}

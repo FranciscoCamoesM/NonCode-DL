@@ -18,9 +18,9 @@ for file in tqdm(os.listdir(folder)):
                 coverage = int(line.split(":")[1].strip())
                 # print(f"Coverage: {coverage}")
 
-            if "Jiggle" in line:
-                jiggle = int(line.split(":")[1].strip())
-                # print(f"Jiggle: {jiggle}")
+            if "Jitter" in line:
+                jitter = int(line.split(":")[1].strip())
+                # print(f"Jitter: {jitter}")
 
             if "Validation Confusion Matrix" in line:
                 matrix = line.split(":")[1].strip()
@@ -101,7 +101,7 @@ for file in tqdm(os.listdir(folder)):
             "ID": ID,
             "ENH": ENH,
             "Coverage": coverage,
-            "Jiggle": jiggle,
+            "Jitter": jitter,
             "Weight Decay": weight_decay,
             "Learning Rate": learning_rate,
             "Epochs": epochs,
@@ -130,7 +130,7 @@ for file in tqdm(os.listdir(folder)):
         ID = None
         ENH = None
         coverage = None
-        jiggle = None
+        jitter = None
         weight_decay = None
         learning_rate = None
         epochs = None
@@ -174,7 +174,7 @@ df = df.sort_values(by=["Validation ROC AUC", "Validation F1 Score"], ascending=
 print(df.head(25))
 
 # params df
-params_df = df[["ID", "ENH", "Coverage", "Jiggle", "Weight Decay", "Learning Rate", "Epochs"]].copy()
+params_df = df[["ID", "ENH", "Coverage", "Jitter", "Weight Decay", "Learning Rate", "Epochs"]].copy()
 params_df["lr_wd"] = params_df["Learning Rate"].astype(str) + "_" + params_df["Weight Decay"].astype(str)
 # count how many unique lr_wd combinations there are
 unique_lr_wd = params_df["lr_wd"].nunique()
