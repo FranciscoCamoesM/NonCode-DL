@@ -155,7 +155,7 @@ if not args.optuna:
     plt.show()
 
 
-# create a confusion matrix
+# calculate test confusion matrix
 model.eval()
 all_preds = []
 all_targets = []
@@ -188,6 +188,40 @@ print(all_targets[:5])
 cm = confusion_matrix(all_targets, all_preds)
 un_normalized_cm = cm.copy()  # Keep the unnormalized confusion matrix for saving
 cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]         #normalize the confusion matrix
+
+
+# calculate validation cm and auc-roc
+
+all_preds = []
+all_targets = []
+if N_CLASSES <= 2:
+    for i, (data, target) in enumerate(val_loader):
+        data, target = data.to(device), target.to(device)
+        data = data.float()
+        target = target.float()
+        output = model(data)
+        preds = torch.round(torch.sigmoid(output))
+        all_preds.extend(preds.cpu().detach().numpy())
+        all_targets.extend(target.cpu().detach().numpy())
+else:
+    for i, (data, target) in enumerate(val_loader):
+        data, target = data.to(device), target.to(device)
+        data = data.float()
+        target = target.float()
+        output = model(data)
+        preds = torch.argmax(output, dim=1)
+        target = torch.argmax(target, dim=1)
+        all_preds.extend(preds.cpu().detach().numpy())
+        all_targets.extend(target.cpu().detach().numpy())
+
+from sklearn.metrics import roc_auc_score
+
+val_cm = confusion_matrix(all_targets, all_preds)
+val_un_normalized_cm = val_cm.copy()  # Keep the unnormalized confusion matrix for saving
+val_cm = val_cm.astype('float') / val_cm.sum(axis=1)[:, np.newaxis]         #normalize the confusion matrix
+val_auc_roc = roc_auc_score(all_targets, all_preds)
+
+
 
 if not args.optuna:
     sns.heatmap(cm, annot=True)
@@ -267,11 +301,14 @@ if not args.optuna:
             f.write(f"Jitter: {JITTER}\n")
 
         # record the metrics
-        f.write(f"Confusion Matrix: {cm.tolist()}\n")
-        f.write(f"Unnormalized Confusion Matrix: {un_normalized_cm.tolist()}\n")
+        f.write(f"Test Confusion Matrix: {cm.tolist()}\n")
+        f.write(f"Unnormalized Test Confusion Matrix: {un_normalized_cm.tolist()}\n")
         f.write(f"Number of Epochs: {len(train_losses)}\n")
         f.write(f"Train Losses: {train_losses}\n")
         f.write(f"Validation Losses: {val_losses}\n")
+        f.write(f"Validation AUC-ROC: {val_auc_roc}\n")
+        f.write(f"Validation Confusion Matrix: {val_cm.tolist()}\n")
+        f.write(f"Unnormalized Validation Confusion Matrix: {val_un_normalized_cm.tolist()}\n")
 
 
 

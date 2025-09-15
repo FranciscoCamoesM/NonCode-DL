@@ -14,7 +14,7 @@ from tangermeme.plot import plot_logo, plot_heatmap
 
 import argparse
 
-parser = argparse.ArgumentParser(description='Train a model to predict enhancer activity')
+parser = argparse.ArgumentParser()
 
 parser.add_argument('--id', type=int, default=None, help='Batch size for training')
 parser.add_argument('--save_dir', type=str, default='saved_models', help='Directory where the model is saved')

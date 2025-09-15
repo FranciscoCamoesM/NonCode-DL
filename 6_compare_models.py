@@ -54,6 +54,20 @@ class ModelInfo():
 
 PADDING = True
 
+# if False:
+#     temp = model_ref
+#     model_ref = model_test
+#     model_test = temp
+
+# models = [162929, 161039, 171106] #20
+# models = [135230, 145614, 162929, 131953, 105959, 105933, 104814] #ANK
+# models = [104335, 152018, 175800]
+# models = [191162606, 188140837, 187141747, 189003822, 187134752, 191164107, 188150341] # ank
+# models = [205105342, 205122355, 191212610, 188144325] # chr20:43021876-43022076
+# models = [181190907, 193164951, 188160740] # chr11:17429230-17429430
+# models = [192153143, 188213332] #chr11:2858382-2858582
+# models = [188155822, 188031228] # chr7:127258124-127258324
+
 
 
 models = [205132638, 194102032] # chr7:127258124-127258324
@@ -79,6 +93,7 @@ if not os.path.exists(savedir):
 
           
 SAVED_MODELS_DIR = "saved_models_final"
+# models = [192181302, 188161056, 184184329, 182155644, 181183315, 188151016] ##### falta o E22P1A3!!!!!!
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -167,7 +182,7 @@ for model_ref_n in models:
 
         # plot output
 
-        fig = plt.figure(figsize=(8, 8))
+        fig = plt.figure(figsize=(10, 8))
         gs = GridSpec(4, 4)
 
         ax_main = fig.add_subplot(gs[1:4, 0:3])
@@ -175,13 +190,14 @@ for model_ref_n in models:
             ax_main.scatter(model_ref_output, model_test_output, c=ref_labels, cmap='bwr', alpha=0.1)
         else:
             ax_main.scatter(model_ref_output, model_test_output, c=ref_labels, cmap='bwr', alpha=0.5)
-        ax_main.set_xlabel('Reference Model Output')
-        ax_main.set_ylabel('Tested Model Output')
+        ax_main.set_xlabel(f'Reference Model {model_ref_info.enh} Output', fontsize=14)
+        ax_main.set_ylabel(f'Tested Model {model_test_info.enh} Output', fontsize=14)
         if model_ref_info.enh == model_test_info.enh:
-            ax_main.set_title(f'Reference Model {model_ref_info.model_id} ({model_ref_info.model_info["Label"]}) vs Tested Model {model_test_info.model_id} ({model_test_info.model_info["Label"]})')
-            
+            #ax_main.set_title(f'Reference Model {model_ref_info.model_id} ({model_ref_info.model_info["Label"]}) vs Tested Model {model_test_info.model_id} ({model_test_info.model_info["Label"]})')
+            pass
         else:
-            ax_main.set_title(f'Reference Model {model_ref_info.model_id} ({model_ref_info.enh}) vs Tested Model {model_test_info.model_id} ({model_test_info.enh})')
+            #ax_main.set_title(f'Reference Model {model_ref_info.model_id} ({model_ref_info.enh}) vs Tested Model {model_test_info.model_id} ({model_test_info.enh})')
+            pass
 
         positive_data_ref = model_ref_output[ref_labels == 1]
         positive_data_test = model_test_output[ref_labels == 1]
@@ -191,20 +207,21 @@ for model_ref_n in models:
         ax_x_hist = fig.add_subplot(gs[0, 0:3], sharex=ax_main)
         ax_x_hist.hist(positive_data_ref, bins=50, alpha=0.5, color= 'red', density=True)
         ax_x_hist.hist(negative_data_ref, bins=50, alpha=0.5, color= 'blue', density=True)
-        ax_x_hist.set_ylabel('Frequency')
+        ax_x_hist.set_ylabel('Density', fontsize=12)
         if model_ref_info.enh == model_test_info.enh:
             ax_x_hist.set_title(f'Reference Model {model_ref_info.model_id} on {model_ref_info.model_info["Label"]}')
+            
         else:
-            ax_x_hist.set_title(f'Reference Model trained on {model_ref_info.enh}')
+            ax_x_hist.set_title(f"Projection of {model_ref_info.enh}'s outputs", fontsize=14)
 
         ax_y_hist = fig.add_subplot(gs[1:4, 3], sharey=ax_main)
         ax_y_hist.hist(positive_data_test, bins=50, alpha=0.5, orientation='horizontal', color= 'red', density=True)
         ax_y_hist.hist(negative_data_test, bins=50, alpha=0.5, orientation='horizontal', color= 'blue', density=True)
-        ax_y_hist.set_xlabel('Frequency')
+        ax_y_hist.set_xlabel('Density', fontsize=12)
         if model_ref_info.enh == model_test_info.enh:
             ax_y_hist.set_title(f'Tested Model {model_test_info.model_id} on {model_ref_info.model_info["Label"]}')
         else:
-            ax_y_hist.set_title(f'Tested Model trained on {model_test_info.enh}')
+            ax_y_hist.set_title(f"Projection of\n{model_test_info.enh}'s outputs", fontsize=14)
 
         # calculate correlation metrics
         from scipy.stats import pearsonr, spearmanr
@@ -219,8 +236,8 @@ for model_ref_n in models:
         
         print(f"Pearson Correlation: {pearson_corr}, Spearman Correlation: {spearman_corr}, AUC Score: {auc_score}", "\n\n", "-"*50)
 
-        ax_main.text(0.05, 0.95, f'Pearson Correlation: {pearson_corr:.2f}\nSpearman Correlation: {spearman_corr:.2f}\nAUC Score of Tested Model: {auc_score:.2f}',
-                     transform=ax_main.transAxes, fontsize=14,
+        ax_main.text(0.05, 0.95, f'Correlation Metrics:\n  -Pearson Correlation: {pearson_corr:.2f}\n  -Spearman Correlation: {spearman_corr:.2f}\n  -AUC Score of Tested Model: {auc_score:.2f}',
+                     transform=ax_main.transAxes, fontsize=12,
                 verticalalignment='top', bbox=dict(boxstyle='round', facecolor='white', alpha=0.5))
         
         # explain the colors in the scatter plot with a legend
