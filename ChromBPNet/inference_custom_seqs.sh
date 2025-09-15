@@ -15,4 +15,4 @@ chrombpnet pred_bw \
   -op numerical_inference_results_custom/results \
   -bs 256
 
-python display_inference.py --save_output --outfile ../NonCode/chrombpnet_experiments/predictions/E22P1A3_25_preds.txt
+python display_inference.py --save_output --outfile ../chrombpnet_experiments/predictions/E22P1A3_25_preds.txt 

@@ -48,14 +48,13 @@ with open(filename.format(inference_enh=inference_enh, inference_coverage=infere
     f.write(simple_pad(seq, 250).upper() + "\n")
 
 # create a copy of this file named "custom_seqs.fa" in the chrombpnet folder
-chrombpnet_folder = "../ChromBPNet/"
+chrombpnet_folder = "./ChromBPNet/"
 import os
 import shutil
 shutil.copy(filename.format(inference_enh=inference_enh, inference_coverage=inference_coverage), os.path.join(chrombpnet_folder, "custom_seqs.fa"))
 
 
-# then, get the file created by this script, move it to the chrombpnet folder, change its name to "custom_seqs.fa" and run the chrombpnet inference_custom_seqs.sh script
-# after that, the results will be in the chrombpnet folder, in the file "custom_seqs_predictions.txt"
-# then, run the results will be recorded in the file custom_seqs_preds.txt.
+# then, run the chrombpnet inference_custom_seqs.sh script
+# after that, the results will be in the chrombpnet_experiments/predictions folder
 
-# you can bring that file to this folder, and then run the part 2 of this code to get the plot the results and calculate the metrics
+# you can then run the part 2 of this code to get the plot the results and calculate the metrics
