@@ -53,9 +53,9 @@ This repository contains the code used for training and evaluating the models de
 
 ---
 
-## ⚙️ Installation
+## Usage Instructions
 
-### Classification and Regression Models
+### Installation of the environment for Classification and Regression Models
 
 Create the environment using the provided Conda YAML file:
 
