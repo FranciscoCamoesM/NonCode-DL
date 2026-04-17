@@ -3,12 +3,16 @@ import os
 import matplotlib.pyplot as plt
 from data_preprocess import import_files, load_wt, get_seq_label_pairs, EnhancerDataset, preset_labels
 from tqdm import tqdm
-
-
-SAVE_DIR = 'dataset_analysis'
-
 from Bio import pairwise2
 from Bio.pairwise2 import format_alignment
+from collections import defaultdict
+
+
+# folder with the dataset files
+local_path = "Fasta_Pool3"
+# folder to save the analysis results
+SAVE_DIR = 'dataset_analysis'
+
 
 def count_mutations(wt_seq, mut_seq):
     # Align sequences
@@ -37,7 +41,6 @@ def count_mutations(wt_seq, mut_seq):
     return aligned_wt, aligned_mut
 
 
-from collections import defaultdict
 def mutation_distribution(wt_seq, mut_seqs, enh):
     mut_counts = {}
     distribution = defaultdict(int)
@@ -97,7 +100,6 @@ def count_dinucleotides(seq):
 
 
 # Load the data
-local_path = "Fasta_Pool3"
 all_files = import_files(local_path)
 
 
@@ -123,6 +125,8 @@ for enh in enh_list:
 
 
     lengths = {"MM": lengths["MM"], "M": lengths["NM"], "P": lengths["NP"], "PP": lengths["PP"]}
+
+
 
 
     # plot lengths

@@ -11,11 +11,11 @@ from sklearn.model_selection import train_test_split
 import numpy as np
 from tqdm import tqdm
 
+import argparse
 
 
 ### BEGGINIGN OF THE CODE ###
 
-import argparse
 parser = argparse.ArgumentParser(description='Train a neural network to predict enhancer activity')
 parser.add_argument('--enh', type=str, default='E25E10', help='Enhancer name to train on')
 parser.add_argument('--label', type=str, default='mm_v_all', help='Label title to train on')

@@ -1,17 +1,16 @@
-from data_preprocess import one_hot_encode, load_wt, simple_pad, preset_labels, load_trained_model, pad_samples
-import tangermeme.plot as tp
-import numpy as np
-import torch
-import matplotlib.pyplot as plt
-from models import SignalPredictor1D
 import os
+import torch
+import numpy as np
+import pandas as pd
+import tangermeme.plot as tp
+import matplotlib.pyplot as plt
+from data_preprocess import one_hot_encode, load_wt, simple_pad, preset_labels, load_trained_model, pad_samples
+from models import SignalPredictor1D
 import argparse
 
 
 
-def saturation_mutagenesis(model, enh_name, device, images_save_dir, BATCH_SIZE=256, WT_SEQ=None, return_specific_mutations=None):
-    JITTER = 0
-    
+def saturation_mutagenesis(model, enh_name, device, BATCH_SIZE=256, WT_SEQ=None):
     if WT_SEQ is None:
         WT_SEQ = load_wt(enh_name.strip())
         WT_SEQ = simple_pad(WT_SEQ, 250, jitter=JITTER)
@@ -46,20 +45,27 @@ def saturation_mutagenesis(model, enh_name, device, images_save_dir, BATCH_SIZE=
     WT_value= sat_mut[0]
     sat_mut = sat_mut[1:]  # Remove the wild-type sequence output
 
-    sat_mut = sat_mut.reshape(len(WT_SEQ), 5).T - WT_value
+    sat_mut = sat_mut.reshape(len(WT_SEQ), 5).T - WT_value  # Reshape to (4, sequence_length) and center on WT
     deletions_right = sat_mut[4, :] * one_hot_encode(WT_SEQ).T # Deletion effects at the right end
     sat_mut = sat_mut[:4, :]  # Remove the deletion effects at the right end
 
-    deletions_left = sat_mut * one_hot_encode(WT_SEQ).T
-    sat_mut = sat_mut * (1 - one_hot_encode(WT_SEQ).T)  # Apply the deletion effects to the saturation mutation data
+    deletions_left = sat_mut * one_hot_encode(WT_SEQ).T         # Deletion effects at the left end
+    sat_mut = sat_mut * (1 - one_hot_encode(WT_SEQ).T)  # Substiution effects (set to 0 where there are deletions)
 
-    deletion_effects = (deletions_left + deletions_right) / 2
+    deletion_effects = (deletions_left + deletions_right) / 2   # Average the left and right deletion effects
+
+    return sat_mut, deletion_effects, WT_value
 
 
 
+def plot_saturation_mutagenesis_logo(sat_mut, deletion_effects, WT_value, enh_name, WT_SEQ, images_save_dir, DPI=150):
+
+    plot_save_loc = os.path.join(images_save_dir, f"{enh_name}_saturation_mutagenesis_logo.png")
+    if not os.path.exists(images_save_dir):
+        os.makedirs(images_save_dir)
 
     fig, ax = plt.subplots(3, 1, figsize=(16, 10))
-    ax[0].set_xticks(np.arange(10)*25, np.arange(10)*25-25, fontsize=14)
+    ax[0].set_xticks(np.arange(10)*25, np.arange(10)*25-24, fontsize=14)
     tp.plot_logo(sat_mut, ax[0])
     ax[0].set_title(f"Saturation Mutation Logo for {enh_name} (Centered on WT)", fontsize=18)
     ax[0].set_xlabel("Position", fontsize=16)
@@ -71,71 +77,83 @@ def saturation_mutagenesis(model, enh_name, device, images_save_dir, BATCH_SIZE=
     ax[2].set_xlabel("Position", fontsize=16)
     ax[2].set_ylabel("Deletion Effect", fontsize=16)
     ax[2].grid(True)
-    ax[2].set_xticks(np.arange(10)*25, np.arange(10)*25-25, fontsize=14)
+    ax[2].set_xticks(np.arange(10)*25, np.arange(10)*25-24, fontsize=14)
     ax[2].set_xlim(0, 250)
     ax[2].set_yticklabels(np.round(ax[2].get_yticks(), 2), fontsize=14)
     tp.plot_logo(deletion_effects, ax[1])
     ax[1].set_title(f"Deletion Effects for {enh_name}", fontsize=18)
     ax[1].set_xlabel("Position", fontsize=16)
     ax[1].set_ylabel("Deletion Effect", fontsize=16)
-    ax[1].set_xticks(np.arange(10)*25, np.arange(10)*25-25, fontsize=14)
+    ax[1].set_xticks(np.arange(10)*25, np.arange(10)*25-24, fontsize=14)
     ax[1].set_yticklabels(np.round(ax[1].get_yticks(), 2), fontsize=14)
     plt.tight_layout()
-    plt.savefig(f"{images_save_dir}/{enh_name}_saturation_mutation_logo.png", dpi=150)
-    print(f"Saturation mutation logo saved as {images_save_dir}/{enh_name}_saturation_mutation_logo.png")
+    plt.savefig(plot_save_loc, dpi=DPI)
+    print(f"Saturation mutation logo saved as {plot_save_loc}")
+    plt.close()
+
+def save_sat_mut(sat_mut, deletion_effects, WT_value, enh, WT_SEQ, images_save_dir):
+    file_save_loc = os.path.join(images_save_dir, f"{enh}_saturation_mutagenesis_effects.tsv")
+    data = []
+    for i in range(len(WT_SEQ)):
+        position = i-24
+        WT_nucleotide = WT_SEQ[i]
+        substitution_effects = sat_mut[:, i]
+        deletion_effect = deletion_effects[:, i].sum()  # Total deletion effect at this position
+        data.append([position, WT_nucleotide] + list(substitution_effects) + [deletion_effect])
+    df = pd.DataFrame(data, columns=["Position", "WT_Nucleotide", "Substitution_Effect_A", "Substitution_Effect_C", "Substitution_Effect_G", "Substitution_Effect_T", "Deletion_Effect"])
+    df.to_csv(file_save_loc, index=False, sep="\t")
+    print(f"Saturation mutation effects saved as {file_save_loc}")
 
 
-    sat_mut = sat_mut.T
-    if return_specific_mutations:
-        outputs = [WT_value]
-        for i, n in return_specific_mutations:
-            if i > len(WT_SEQ):
-                raise ValueError(f"Mutation index {i} is out of bounds for the sequence length {len(WT_SEQ)}.")
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Saturation mutagenesis for enhancer sequences')
 
-            outputs.append(WT_value + sat_mut[i+25-JITTER, n])
-        outputs = np.array(outputs)
-        outputs = outputs.flatten().tolist()
-        return outputs
+    parser.add_argument("--id", type=str, required=True, help="model ID")
+    parser.add_argument("--enh", type=str, required=True, help="Enhancer name")
+    parser.add_argument("--device", type=str, default="cuda", help="Device to use (cuda or cpu)")
+    parser.add_argument("--images_save_dir", type=str, default="temp_figs/", help="Directory to save images")
+    parser.add_argument("--batch_size", type=int, default=256, help="Batch size for processing")
+    parser.add_argument("--model_dir", type=str, default="regression_models/", help="Directory containing the model")
 
-    return None
+    # example usage:
+    # python 13_run_saturation_mutagenesis_regression.py --id 2025-07-18_15-17-32 --enh E25E102 --device cuda --images_save_dir saturation_mutagenesis_logos/ --batch_size 256 --model_dir ../NonCode/regression_models/
 
+    args = parser.parse_args()
 
-
-parser = argparse.ArgumentParser(description='Saturation mutagenesis for enhancer sequences')
-
-parser.add_argument("--id", type=str, required=True, help="model ID")
-parser.add_argument("--enh", type=str, required=True, help="Enhancer name")
-parser.add_argument("--device", type=str, default="cuda", help="Device to use (cuda or cpu)")
-parser.add_argument("--images_save_dir", type=str, default="temp_figs/", help="Directory to save images")
-parser.add_argument("--batch_size", type=int, default=256, help="Batch size for processing")
-parser.add_argument("--model_dir", type=str, default="regression_models/", help="Directory containing the model")
-
-args = parser.parse_args()
+    enh = args.enh
+    MODEL_DIR = args.model_dir
+    device = args.device
+    model_id = args.id
 
 
-enh = args.enh
-MODEL_DIR = args.model_dir
-device = args.device
-model_id = args.id
+    if not torch.cuda.is_available() and device == "cuda":
+        print("CUDA is not available, using CPU instead")
+    device = torch.device(device if torch.cuda.is_available() else 'cpu')
 
 
-if not torch.cuda.is_available() and device == "cuda":
-    print("CUDA is not available, using CPU instead")
-device = torch.device(device if torch.cuda.is_available() else 'cpu')
+    enhancer = load_wt(enh.strip())
+    LABELS = preset_labels("mm_v_all")
+    # enhancer = pad_samples([(enhancer, "MM")], LABELS)[0][0]
+    enhancer = simple_pad(enhancer, 250, jitter=0)
+    enhancer = one_hot_encode(enhancer).T  # Shape (4, sequence_length)
+    enhancer = torch.tensor(enhancer, dtype=torch.float32).unsqueeze(0).permute(0, 2, 1)
 
+    model_dir = os.path.join(MODEL_DIR, enh, model_id)
+    model = SignalPredictor1D(1)
 
-enhancer = load_wt(enh.strip())
-LABELS = preset_labels("mm_v_all")
-enhancer = pad_samples([(enhancer, "MM")], LABELS)[0][0]
-enhancer = torch.tensor(enhancer, dtype=torch.float32).unsqueeze(0).permute(0, 2, 1)
+    # Load model
+    model = load_trained_model(enh, model_dir, model, device=device)
+    model.to(device)
+    model.eval()
 
-model_dir = os.path.join(MODEL_DIR, enh, model_id)
-model = SignalPredictor1D(1)
+    # Load WT sequence
+    WT_SEQ = load_wt(enh.strip())
+    WT_SEQ = simple_pad(WT_SEQ, 250, jitter=0)
 
-# Load model
-model = load_trained_model(enh, model_dir, model, device=device)
-model.to(device)
-model.eval()
-
-with torch.no_grad():
-    saturation_mutagenesis(model, enh, device, args.images_save_dir, BATCH_SIZE=args.batch_size)
+    # run saturation mutagenesis
+    with torch.no_grad():
+        sat_mut, deletion_effects, WT_value = saturation_mutagenesis(model, enh, device, BATCH_SIZE=args.batch_size, WT_SEQ=WT_SEQ)
+    plot_saturation_mutagenesis_logo(sat_mut, deletion_effects, WT_value, enh, WT_SEQ, args.images_save_dir)
+    
+    # save as dataframe
+    save_sat_mut(sat_mut, deletion_effects, WT_value, enh, WT_SEQ, args.images_save_dir)

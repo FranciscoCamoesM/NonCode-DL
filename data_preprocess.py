@@ -160,7 +160,7 @@ def one_hot_encode_label(label, encoding_dict):
 
     return np.array(encoding_dict[label])
 
-def simple_pad_batch(batch, PADDING = True, jiggle = 0):
+def simple_pad_batch(batch, PADDING = True, jitter = 0):
     if os.path.exists("padding_seq.txt") and PADDING:
         with open("padding_seq.txt", "r") as f:
             pre_line = f.readline()
@@ -175,11 +175,11 @@ def simple_pad_batch(batch, PADDING = True, jiggle = 0):
     pre_line = pre_line.strip()
     post_line = post_line.strip()
 
-    sequences = [simple_pad(seq, PADDING=PADDING, jiggle=jiggle, pre_and_post_padding=[pre_line, post_line]) for seq in batch]
+    sequences = [simple_pad(seq, PADDING=PADDING, jitter=jitter, pre_and_post_padding=[pre_line, post_line]) for seq in batch]
 
     return sequences
 
-def simple_pad(seq, PADDING = True, jiggle = 0, pre_and_post_padding = None, max_length=250):
+def simple_pad(seq, PADDING = True, jitter = 0, pre_and_post_padding = None, max_length=250):
     if pre_and_post_padding is None:
         if os.path.exists("padding_seq.txt") and PADDING:
             with open("padding_seq.txt", "r") as f:
@@ -203,8 +203,8 @@ def simple_pad(seq, PADDING = True, jiggle = 0, pre_and_post_padding = None, max
     
     seq = pre_line + seq + post_line
     cutting_points = [len(seq)//2 - max_length//2, len(seq)//2 + max_length//2]
-    cutting_points[0] += jiggle
-    cutting_points[1] += jiggle
+    cutting_points[0] += jitter
+    cutting_points[1] += jitter
     cutting_points[0] = max(0, cutting_points[0])
     cutting_points[1] = min(len(seq), cutting_points[1])
     padded_seq = seq[cutting_points[0]:cutting_points[1]]
@@ -213,7 +213,7 @@ def simple_pad(seq, PADDING = True, jiggle = 0, pre_and_post_padding = None, max
 
 
 
-def pad_samples(batch, encoding_dict, PADDING = True, jiggle = 0):
+def pad_samples(batch, encoding_dict, PADDING = True, jitter = 0):
     if os.path.exists("padding_seq.txt") and PADDING:
         with open("padding_seq.txt", "r") as f:
             pre_line = f.readline()
@@ -237,15 +237,15 @@ def pad_samples(batch, encoding_dict, PADDING = True, jiggle = 0):
     for seq in sequences:
         cutting_points = [len(seq)//2 - max_length//2, len(seq)//2 + max_length//2]
         
-        cutting_points[0] += jiggle
-        cutting_points[1] += jiggle
+        cutting_points[0] += jitter
+        cutting_points[1] += jitter
         cutting_points[0] = max(0, cutting_points[0])
         cutting_points[1] = min(len(seq), cutting_points[1])
         padded_seq = seq[cutting_points[0]:cutting_points[1]]
         padded_sequences.append(padded_seq)
 
     # one hot encode
-    one_hot_sequences = [one_hot_encode(seq) for seq in padded_sequences]
+    one_hot_sequences = [one_hot_encode(seq) for seq in padded_sequences]    
     one_hot_labels = [one_hot_encode_label(label, encoding_dict) for label in labels]
 
     return one_hot_sequences, one_hot_labels
@@ -255,16 +255,16 @@ from torch.utils.data import Dataset
 import torch
 
 class EnhancerDataset(Dataset):
-    def __init__(self, seqs, labels, encoding_dict, jiggle_range = None, **kwargs):
+    def __init__(self, seqs, labels, encoding_dict, jitter_range = None, **kwargs):
 
-        if jiggle_range is None:
+        if jitter_range is None:
             self.sequences, self.labels = pad_samples(list(zip(seqs, labels)), encoding_dict, **kwargs)
         else:
             self.sequences = []
             self.labels = []
 
-            for j in range(-jiggle_range, jiggle_range + 1):
-                temp_sequences, temp_labels = pad_samples(list(zip(seqs, labels)), encoding_dict, jiggle=j, **kwargs)
+            for j in range(-jitter_range, jitter_range + 1):
+                temp_sequences, temp_labels = pad_samples(list(zip(seqs, labels)), encoding_dict, jitter=j, **kwargs)
                 self.sequences.extend(temp_sequences)
                 self.labels.extend(temp_labels)
                 
