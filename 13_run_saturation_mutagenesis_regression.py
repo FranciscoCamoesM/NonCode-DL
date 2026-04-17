@@ -115,9 +115,6 @@ if __name__ == "__main__":
     parser.add_argument("--batch_size", type=int, default=256, help="Batch size for processing")
     parser.add_argument("--model_dir", type=str, default="regression_models/", help="Directory containing the model")
 
-    # example usage:
-    # python 13_run_saturation_mutagenesis_regression.py --id 2025-07-18_15-17-32 --enh E25E102 --device cuda --images_save_dir saturation_mutagenesis_logos/ --batch_size 256 --model_dir ../NonCode/regression_models/
-
     args = parser.parse_args()
 
     enh = args.enh
