@@ -26,7 +26,7 @@ training_enh_keys = training_enh_data_dict.keys()
 training_enh_data = zip(training_enh_keys, training_enh_values)
 training_enh_data = list(training_enh_data)
 
-train_seqs, test_seqs = train_test_split(training_enh_data, test_size=0.2, random_state=42)
+train_seqs, test_seqs = train_test_split(training_enh_data, test_size=0.2, random_state=42) # it is crucial that the seed is the same as the one used for training the model, otherwise we will have data leakage and the inference results will be biased.
 train_seqs, val_seqs = train_test_split(train_seqs, test_size=0.2, random_state=42)
 print(f"Training data size: {len(train_seqs)}, Validation data size: {len(val_seqs)}, Test data size: {len(test_seqs)}")
 train_seqs= [seq for seq, _ in train_seqs]

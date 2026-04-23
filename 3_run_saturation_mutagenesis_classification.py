@@ -9,13 +9,18 @@ from torch.utils.data import DataLoader
 import numpy as np
 from tqdm import tqdm
 
+from satmut_functions import saturation_mutagenesis, save_sat_mut, plot_saturation_mutagenesis_logo
+
 from tangermeme.deep_lift_shap import deep_lift_shap
-from tangermeme.plot import plot_logo, plot_heatmap
+from tangermeme.plot import plot_logo
 
 import argparse
 
-parser = argparse.ArgumentParser()
 
+# example way to run the script from command line:
+# python 3_run_saturation_mutagenesis_classification.py --id 192161453 --enh E25E102 --label mm_v_all --o "temp_figs_XAI_class" --save_dir "../NonCode/saved_models_final/"
+
+parser = argparse.ArgumentParser()
 parser.add_argument('--id', type=int, default=None, help='Batch size for training')
 parser.add_argument('--save_dir', type=str, default='saved_models', help='Directory where the model is saved')
 parser.add_argument('--enh', type=str, default=None, help='Enhancer name to train on')
@@ -32,7 +37,6 @@ os.makedirs(images_save_dir, exist_ok=True)
 
 if model_id is None:
     model_id = input("Enter the model id: ")
-
 
 ## find model name with corresponding id
 possible_models = []
@@ -110,98 +114,28 @@ model.to(device)
 model.eval()
 
 
+# This is called a Wrapper. It's basically a new model that contains the original model, but can be used to modify the input or the output.
+# In this case, it is used to take the negative of the output, because during training for loss-of-function classification models, the label 1 meant loss of
+# function, meaning that higher output values actually correspond to lower function. By using this wrapper, we can swap the meaning of the output,
+# making the interpretation of the XAI more intuitive (higher values correspond to higher function).
 class Wrapper(nn.Module):
     def __init__(self, model):
         super(Wrapper, self).__init__()
         self.model = model
 
     def forward(self, x):
+        # runs the original model
         out = self.model(x)
 
-        # during training for mm_v_p, the label 1 was loss, so we need to take the negative of the output
+        # returns the negative of the output
         return -out
 
 
 model = Wrapper(model)
 
 
-# load original enhancer
-with open(f"original_enhancers.txt", "r") as f:
-    enhancers = f.readlines()
-    # format is >EnhancerName\n
-    #               sequence\n
-    # so select the line after the one with the enhancer name
-    WT_SEQ = enhancers[enhancers.index(f">{ENHANCER_NAME}\n") + 1].strip()
-
-
-WT_SEQ = simple_pad(WT_SEQ, max_length=252)
-WT_SEQ = WT_SEQ.upper()
-
-print(f"Using wild-type sequence: {WT_SEQ[1:-1]}.")
-
-saturation_mut_data = [one_hot_encode(WT_SEQ[1:-1]).T]  # Start with the wild-type sequence
-for i in range(len(WT_SEQ)-1):
-    if i ==0:
-        continue  # Skip the first position, as it is not a mutation site
-    for nuc in ["A", "C", "G", "T"]:
-        if WT_SEQ[i] != nuc:
-            saturation_mut_data.append(one_hot_encode(WT_SEQ[1:i] + nuc + WT_SEQ[i+1:-1]).T)
-        else:
-            saturation_mut_data.append(one_hot_encode(WT_SEQ[:i] + WT_SEQ[i+1:-1]).T)
-
-    saturation_mut_data.append(one_hot_encode(WT_SEQ[1:i] + WT_SEQ[i+1:]).T)
-
-saturation_mut_data = np.array(saturation_mut_data)
-
-
-data_loader = torch.utils.data.DataLoader(dataset=saturation_mut_data,
-                                             batch_size=BATCH_SIZE,
-                                             shuffle=False)
-
-sat_mut = []
-for images in data_loader:
-  images = images.to(device).float()
-  output = model(images)
-  sat_mut.extend(output.cpu().detach().numpy())
-
-sat_mut = np.array(sat_mut)
-
-WT_value= sat_mut[0]
-sat_mut = sat_mut[1:]  # Remove the wild-type sequence output
-
-WT_SEQ = WT_SEQ[1:-1]  # Remove the padding characters
-
-sat_mut = sat_mut.reshape(len(WT_SEQ), 5).T - WT_value
-
-deletion_effect_right = sat_mut[4]
-sat_mut = sat_mut[:4]  # Keep only the first four rows (A, C, G, T)
-deletion_effects = (sat_mut * one_hot_encode(WT_SEQ).T + deletion_effect_right * one_hot_encode(WT_SEQ).T) / 2
-sat_mut = sat_mut * (1 - one_hot_encode(WT_SEQ).T)  # Apply the deletion effects to the saturation mutation data
-
-
-import tangermeme.plot as tp
-
-
-fig, ax = plt.subplots(3, 1, figsize=(18, 15))
-ax[0].set_xticks(np.arange(10)*25, np.arange(10)*25-25)
-tp.plot_logo(sat_mut, ax[0])
-ax[0].set_title(f"Saturation Mutation Logo for {ENHANCER_NAME} (Centered on WT)")
-ax[1].plot(np.arange(6)*50, np.arange(6)*0, color='red', linestyle='--', linewidth=1)
-ax[1].plot(np.sum(deletion_effects * one_hot_encode(WT_SEQ).T, axis=0), color='black', linewidth=2)
-ax[1].set_title(f"Deletion Effects for {ENHANCER_NAME}")
-ax[1].set_xlabel("Position")
-ax[1].set_ylabel("Deletion Effect")
-ax[1].grid(True)
-ax[1].set_xticks(np.arange(10)*25, np.arange(10)*25-25)
-ax[1].set_xlim(0, 250)
-tp.plot_logo(deletion_effects, ax[2])
-ax[2].set_title(f"Deletion Effects for {ENHANCER_NAME}")
-ax[2].set_xlabel("Position")
-ax[2].set_ylabel("Deletion Effect")
-ax[2].grid(True)
-ax[2].set_xticks(np.arange(10)*25, np.arange(10)*25-25)
-plt.savefig(f"{images_save_dir}/{ENHANCER_NAME}_{model_id}_saturation_mutation_logo.png", dpi=150)
-print(f"Saturation mutation logo saved as {images_save_dir}/{ENHANCER_NAME}_{model_id}_saturation_mutation_logo.png")
+sat_mut, deletion_effects, WT_value = saturation_mutagenesis(model, ENHANCER_NAME, device, BATCH_SIZE=BATCH_SIZE)
+plot_saturation_mutagenesis_logo(sat_mut, deletion_effects, WT_value, ENHANCER_NAME, WT_SEQ=None, images_save_dir=images_save_dir)
 
 
 # save the saturation mutation data to a file

@@ -2,18 +2,33 @@ import os
 import numpy as np
 
 
-
-
-def load_fasta(file):
-    enh = []
-    title = ""
-    with open(file) as f:
+def load_seqs_csv(file_path):
+    sequences = []
+    with open(file_path, "r") as f:
         for line in f:
-            if line[0] == ">":
-                title = line.strip()
+            seq = line.strip()
+            if seq:  # skip empty lines
+                sequences.append(seq)
+    return sequences
+
+
+def load_fasta(file_path):
+    data_list = []
+    with open(file_path, "r") as f:
+        current_seq = ""
+        current_name = None
+        for line in f:
+            line = line.strip()
+            if line.startswith(">"):
+                if current_seq and current_name:
+                    data_list.append([current_name, current_seq])
+                current_name = line[1:]  # remove '>'
+                current_seq = ""
             else:
-                enh.append([title, line.strip()])
-    return enh
+                current_seq += line
+        if current_seq and current_name:  # add the last sequence
+            data_list.append([current_name, current_seq])
+    return data_list
 
 
 class File:
@@ -156,11 +171,13 @@ def one_hot_decode(seq):
     return decoded_seq
 
 
-def one_hot_encode_label(label, encoding_dict):
 
+
+
+def one_hot_encode_label(label, encoding_dict):
     return np.array(encoding_dict[label])
 
-def simple_pad_batch(batch, PADDING = True, jitter = 0):
+def simple_pad_batch(batch, PADDING = True, jitter = 0, max_length=250):
     if os.path.exists("padding_seq.txt") and PADDING:
         with open("padding_seq.txt", "r") as f:
             pre_line = f.readline()
@@ -168,14 +185,14 @@ def simple_pad_batch(batch, PADDING = True, jitter = 0):
             post_line = f.readline()
     else:
         print("Padding sequence file not found. Using padding with N's.")
-        pre_line = "N" * 125
+        pre_line = "N" * max_length
         skip_line = "N" * 0
-        post_line = "N" * 125
+        post_line = "N" * max_length
 
     pre_line = pre_line.strip()
     post_line = post_line.strip()
 
-    sequences = [simple_pad(seq, PADDING=PADDING, jitter=jitter, pre_and_post_padding=[pre_line, post_line]) for seq in batch]
+    sequences = [simple_pad(seq, PADDING=PADDING, jitter=jitter, pre_and_post_padding=[pre_line, post_line], max_length=max_length) for seq in batch]
 
     return sequences
 
@@ -188,9 +205,9 @@ def simple_pad(seq, PADDING = True, jitter = 0, pre_and_post_padding = None, max
                 post_line = f.readline()
         else:
             print("Padding sequence file not found. Using padding with N's.")
-            pre_line = "N" * 125
+            pre_line = "N" * max_length
             skip_line = "N" * 0
-            post_line = "N" * 125
+            post_line = "N" * max_length
 
     else:
         pre_line = pre_and_post_padding[0]
@@ -210,6 +227,20 @@ def simple_pad(seq, PADDING = True, jitter = 0, pre_and_post_padding = None, max
     padded_seq = seq[cutting_points[0]:cutting_points[1]]
     
     return padded_seq
+
+
+def _pad_batch_jitter_range(seqs, jitter_lim):
+    padded_seqs = []
+    for j in range(-jitter_lim, jitter_lim + 1):
+        padded_seqs.extend(simple_pad_batch(seqs, jitter=j))
+    return padded_seqs
+
+def pad_dataset_jitter_range(d, jitter_lim):
+    seqs, values = list(zip(*d))
+    padded_seqs = _pad_batch_jitter_range(seqs, jitter_lim)
+    padded_values = values * (2 * jitter_lim + 1)
+    padded_seqs = [one_hot_encode(seq) for seq in padded_seqs]
+    return list(zip(padded_seqs, padded_values))
 
 
 
@@ -325,9 +356,6 @@ def load_wt(ENHANCER_NAME):
     # load original enhancer
     with open(f"original_enhancers.txt", "r") as f:
         enhancer = f.readlines()
-        # format is >EnhancerName\n
-        #               sequence\n
-        # so select the line after the one with the enhancer name
         enhancer = enhancer[enhancer.index(f">{ENHANCER_NAME}\n") + 1].strip()
 
     return enhancer

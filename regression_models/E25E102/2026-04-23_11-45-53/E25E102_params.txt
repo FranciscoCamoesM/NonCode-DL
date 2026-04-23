@@ -1,0 +1,13 @@
+Coverage: 75
+Learning Rate: 1e-05
+Weight Decay: 1e-06
+Clip Gradients: True
+Max Epochs: 1000
+Early Stopping Patience: 200
+Epochs Trained: 351
+Batch Size: 256
+Jitter: 5
+ENH List: [[75, 'E25E102', array([ 74226, 107443, 103524,   7799])]]
+Pierson Correlation: 0.8017155951414383
+Mean Squared Error: 0.036904316395521164
+R^2 Score: 0.6194827556610107

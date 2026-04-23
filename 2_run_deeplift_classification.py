@@ -133,12 +133,12 @@ X = []
 y = []
 for i in range(-5, 6):
     if ENHANCER_NAME != "E25E10R3":
-        dataset = get_seq_label_pairs(enh_name = ENHANCER_NAME, local_path = dataloc, jiggle=i)
+        dataset = get_seq_label_pairs(enh_name = ENHANCER_NAME, local_path = dataloc, jitter=i)
     else:
-        dataset = get_coverage_seq_label_pairs(enh_name = ENHANCER_NAME, local_path = dataloc, jiggle=i, coverage=10)
+        dataset = get_coverage_seq_label_pairs(enh_name = ENHANCER_NAME, local_path = dataloc, jitter=i, coverage=10)
     X.extend(list(dataset.keys()))
     y.extend(list(dataset.values()))
-    print(f"Loaded {len(X)} samples from {ENHANCER_NAME} with jiggle {i}")
+    print(f"Loaded {len(X)} samples from {ENHANCER_NAME} with jitter {i}")
 dataset = EnhancerDataset(X, y, LABELS)
 print(f"Dataset_object created with {len(dataset)} samples")
 dataloader = torch.utils.data.DataLoader(dataset, batch_size=min(N_REFS, 256), shuffle=True, num_workers=4)
